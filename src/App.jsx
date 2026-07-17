@@ -78,10 +78,9 @@ function isSameDate(a, b) {
   );
 }
 
-// Segunda-feira da semana da data informada (independente do dia atual ser domingo).
 function getMondayOfWeek(date) {
   var d = new Date(date);
-  var day = d.getDay(); // 0 = domingo ... 6 = sabado
+  var day = d.getDay();
   var diff = day === 0 ? -6 : 1 - day;
   d.setDate(d.getDate() + diff);
   d.setHours(0, 0, 0, 0);
@@ -99,7 +98,6 @@ function buildWeekDays(referenceDate) {
   return days;
 }
 
-// "sexta-feira, 17 de julho" -> "Sexta-feira, 17 de Julho"
 function formatFriendlyDate(input) {
   var d = typeof input === "string" ? new Date(input) : input;
   var raw = d.toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" });
@@ -110,6 +108,13 @@ function formatFriendlyDate(input) {
   var weekdayCap = weekday.charAt(0).toUpperCase() + weekday.slice(1);
   var restCap = rest.replace(/de (\p{L})/u, function (m, c) { return "de " + c.toUpperCase(); });
   return weekdayCap + ", " + restCap;
+}
+
+function formatTime(input) {
+  var d = typeof input === "string" ? new Date(input) : input;
+  var hh = String(d.getHours()).padStart(2, "0");
+  var mm = String(d.getMinutes()).padStart(2, "0");
+  return hh + ":" + mm;
 }
 
 function IconField(props) {
@@ -285,6 +290,7 @@ function LoginScreen(props) {
       return;
     }
 
+    console.log("[login] auth.uid():", userId, "| profiles.id:", profileResult.data.id);
     props.onLoginSuccess(profileResult.data);
   }
 
@@ -408,7 +414,16 @@ function StudentPicker(props) {
               : "Ultimo treino: " + formatFriendlyDate(histDate);
           }
           return (
-            <button key={s.id} onClick={function () { props.onPick(s); }} style={{ display: "flex", alignItems: "center", gap: 12, background: C.panel, border: "1px solid " + C.border, borderRadius: 12, padding: "12px 14px", cursor: "pointer", textAlign: "left" }}>
+            <button
+              key={s.id}
+              onClick={function () {
+                // s.id e sempre o UUID da tabela profiles (== auth.uid() do aluno),
+                // nunca o telefone. E o que garante o vinculo correto com exercises.student_id.
+                console.log("[professor] selecionou aluno - profiles.id (UUID):", s.id, "| nome:", s.name, "| telefone (so exibicao):", s.phone);
+                props.onPick(s);
+              }}
+              style={{ display: "flex", alignItems: "center", gap: 12, background: C.panel, border: "1px solid " + C.border, borderRadius: 12, padding: "12px 14px", cursor: "pointer", textAlign: "left" }}
+            >
               <Avatar name={s.name} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <p style={{ color: C.white, fontSize: 15, fontWeight: 600, margin: 0 }}>{s.name}</p>
@@ -440,11 +455,29 @@ function ProgressBar(props) {
   );
 }
 
-// Secao "Minha Frequencia": mostra a semana atual (Seg a Dom) e destaca
-// em azul os dias em que ha registro na tabela workout_history.
+// Secao "Minha Frequencia": dias da semana atual, clicaveis.
+// Ao clicar num dia com treino, mostra um balao com Treino + horario, buscando em workout_history.
 function WeeklyFrequency(props) {
   var days = buildWeekDays(new Date());
   var today = new Date();
+  var stateSelectedDay = useState(null); var selectedDay = stateSelectedDay[0]; var setSelectedDay = stateSelectedDay[1];
+
+  function findRecordForDay(d) {
+    for (var j = 0; j < props.historyRecords.length; j++) {
+      var recDate = new Date(props.historyRecords[j].created_at);
+      if (isSameDate(recDate, d)) return props.historyRecords[j];
+    }
+    return null;
+  }
+
+  function handleDayClick(d) {
+    var record = findRecordForDay(d);
+    if (!record) {
+      setSelectedDay(null);
+      return;
+    }
+    setSelectedDay({ date: d, record: record });
+  }
 
   return (
     <div style={{ marginBottom: 22 }}>
@@ -453,13 +486,18 @@ function WeeklyFrequency(props) {
       </p>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 6 }}>
         {days.map(function (d, i) {
-          var attended = false;
-          for (var j = 0; j < props.historyDates.length; j++) {
-            if (isSameDate(props.historyDates[j], d)) { attended = true; break; }
-          }
+          var record = findRecordForDay(d);
+          var attended = !!record;
           var isToday = isSameDate(d, today);
           return (
-            <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, flex: 1 }}>
+            <button
+              key={i}
+              onClick={function () { handleDayClick(d); }}
+              style={{
+                display: "flex", flexDirection: "column", alignItems: "center", gap: 4, flex: 1,
+                background: "transparent", border: "none", padding: 0, cursor: attended ? "pointer" : "default",
+              }}
+            >
               <span style={{ color: C.silverDim, fontSize: 10.5, fontWeight: 700 }}>{WEEK_DAY_LABELS[i]}</span>
               <div
                 style={{
@@ -473,10 +511,18 @@ function WeeklyFrequency(props) {
               >
                 {d.getDate()}
               </div>
-            </div>
+            </button>
           );
         })}
       </div>
+
+      {selectedDay ? (
+        <div style={{ marginTop: 12, background: C.panel, border: "1px solid " + C.blueDim, borderRadius: 10, padding: "10px 12px" }}>
+          <p style={{ color: C.white, fontSize: 12.5, margin: 0 }}>
+            Nesse dia voce concluiu o Treino <b>{selectedDay.record.workout_tab}</b> as <b>{formatTime(selectedDay.record.created_at)}</b>
+          </p>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -568,8 +614,7 @@ function FinishWorkoutModal(props) {
   );
 }
 
-// Painel do aluno: exercicios com is_completed persistido, frequencia semanal
-// e finalizacao de treino com registro em workout_history.
+// Painel do aluno.
 function AlunoDashboard(props) {
   var student = props.student;
   var stateTab = useState("A"); var tab = stateTab[0]; var setTab = stateTab[1];
@@ -580,31 +625,31 @@ function AlunoDashboard(props) {
   var stateShowModal = useState(false); var showModal = stateShowModal[0]; var setShowModal = stateShowModal[1];
   var stateClearing = useState(false); var clearing = stateClearing[0]; var setClearing = stateClearing[1];
   var stateResetError = useState(""); var resetError = stateResetError[0]; var setResetError = stateResetError[1];
-  var stateHistoryDates = useState([]); var historyDates = stateHistoryDates[0]; var setHistoryDates = stateHistoryDates[1];
+  var stateHistoryRecords = useState([]); var historyRecords = stateHistoryRecords[0]; var setHistoryRecords = stateHistoryRecords[1];
+
+  // Carrega os exercicios do aluno logado. Extraida para ser reutilizada
+  // apos o reset, garantindo que a tela sempre reflita o estado real do banco.
+  async function loadExercises() {
+    setLoading(true);
+    var result = await supabase.from("exercises").select("*").eq("student_id", student.id).order("created_at", { ascending: true });
+    if (!result.error && result.data) {
+      setWorkout(groupByTab(result.data));
+    }
+    setLoading(false);
+    return result;
+  }
 
   useEffect(function () {
-    var cancelled = false;
-    async function loadExercises() {
-      setLoading(true);
-      var result = await supabase.from("exercises").select("*").eq("student_id", student.id).order("created_at", { ascending: true });
-      if (!cancelled) {
-        if (!result.error && result.data) {
-          setWorkout(groupByTab(result.data));
-        }
-        setLoading(false);
-      }
-    }
+    console.log("[aluno] carregando painel para profiles.id (UUID):", student.id, "| nome:", student.name);
     loadExercises();
-    return function () { cancelled = true; };
   }, [student.id]);
 
-  // Carrega o historico do proprio aluno para pintar a semana de frequencia.
   useEffect(function () {
     var cancelled = false;
     async function loadHistory() {
-      var result = await supabase.from("workout_history").select("created_at").eq("student_id", student.id);
+      var result = await supabase.from("workout_history").select("*").eq("student_id", student.id);
       if (!cancelled && !result.error && result.data) {
-        setHistoryDates(result.data.map(function (r) { return new Date(r.created_at); }));
+        setHistoryRecords(result.data);
       }
     }
     loadHistory();
@@ -618,9 +663,26 @@ function AlunoDashboard(props) {
       next[tab] = next[tab].map(function (e) { return e.id === ex.id ? Object.assign({}, e, { is_completed: newValue }) : e; });
       return next;
     });
-    var result = await supabase.from("exercises").update({ is_completed: newValue }).eq("id", ex.id).select();
+
+    var result = await supabase
+      .from("exercises")
+      .update({ is_completed: newValue })
+      .eq("id", ex.id)
+      .eq("student_id", student.id)
+      .select();
+
+    console.log(
+      "[toggle] exercicio:", ex.id,
+      "| student_id usado:", student.id,
+      "| linhas afetadas:", result.data ? result.data.length : 0,
+      "| erro:", result.error
+    );
+
     var failed = result.error || !result.data || result.data.length === 0;
     if (failed) {
+      if (!result.error && (!result.data || result.data.length === 0)) {
+        console.warn("[toggle] 0 linhas afetadas — verifique a policy de UPDATE para o aluno na tabela exercises.");
+      }
       setWorkout(function (prev) {
         var next = Object.assign({}, prev);
         next[tab] = next[tab].map(function (e) { return e.id === ex.id ? Object.assign({}, e, { is_completed: !newValue }) : e; });
@@ -642,17 +704,22 @@ function AlunoDashboard(props) {
     setFinishing(true);
     var result = await supabase.from("workout_history").insert([
       { student_id: student.id, workout_tab: tab },
-    ]);
+    ]).select();
     setFinishing(false);
+
+    console.log("[finalizar treino] student_id:", student.id, "| tab:", tab, "| resultado:", result.data, "| erro:", result.error);
+
     if (!result.error) {
-      setHistoryDates(function (prev) { return prev.concat([new Date()]); });
+      if (result.data && result.data[0]) {
+        setHistoryRecords(function (prev) { return prev.concat([result.data[0]]); });
+      }
       setResetError("");
       setShowModal(true);
     }
   }
 
-  // Zera is_completed do treino atual daquele aluno. Depende da policy de UPDATE
-  // "Aluno atualiza os proprios exercicios" existir no Supabase (ver instrucoes).
+  // Zera is_completed do treino atual. Loga a contagem de linhas afetadas
+  // para diagnosticar se a policy de UPDATE do Supabase esta correta.
   async function clearForTomorrow() {
     setClearing(true);
     setResetError("");
@@ -664,23 +731,40 @@ function AlunoDashboard(props) {
       .eq("workout_tab", tab)
       .select();
 
+    var affectedRows = result.data ? result.data.length : 0;
+
+    console.log(
+      "[reset - limpar para amanha] student_id usado:", student.id,
+      "| workout_tab:", tab,
+      "| linhas afetadas:", affectedRows,
+      "| erro:", result.error
+    );
+
     setClearing(false);
 
     if (result.error) {
+      console.error("[reset] erro do Supabase:", result.error.message);
       setResetError("Erro ao limpar: " + result.error.message);
       return;
     }
 
-    if (!result.data || result.data.length === 0) {
-      setResetError("Nada foi atualizado. Confirme se a policy de UPDATE para o aluno existe na tabela exercises.");
+    if (affectedRows === 0) {
+      console.warn("[reset] 0 LINHAS AFETADAS. Isso confirma falta de permissao (RLS) de UPDATE para o aluno na tabela exercises, ou student_id nao bate com nenhuma linha.");
+      setResetError("Nada foi atualizado (0 linhas). Provavel causa: falta a policy de UPDATE para o aluno na tabela exercises no Supabase.");
       return;
     }
 
+    // Atualizacao otimista imediata...
     setWorkout(function (prev) {
       var next = Object.assign({}, prev);
       next[tab] = next[tab].map(function (e) { return Object.assign({}, e, { is_completed: false }); });
       return next;
     });
+
+    // ...e um refresh de verdade direto do banco, para garantir que a tela
+    // bata 100% com o que foi persistido no Supabase.
+    await loadExercises();
+
     setShowModal(false);
   }
 
@@ -709,7 +793,7 @@ function AlunoDashboard(props) {
       </div>
 
       <div style={{ paddingTop: 20 }}>
-        <WeeklyFrequency historyDates={historyDates} />
+        <WeeklyFrequency historyRecords={historyRecords} />
       </div>
 
       <p style={{ color: C.silverDim, fontSize: 12, margin: "0 0 14px" }}>
@@ -854,8 +938,6 @@ function ProfessorExerciseRow(props) {
   );
 }
 
-// Lista "Ultimos Treinos Concluidos" exibida no painel do professor
-// apos selecionar um aluno especifico.
 function RecentHistoryList(props) {
   if (props.loading) {
     return <p style={{ color: C.silverDim, fontSize: 12.5, margin: "0 0 16px" }}>Carregando historico...</p>;
@@ -885,6 +967,9 @@ function RecentHistoryList(props) {
   );
 }
 
+// Painel do professor. selectedStudent.id e sempre o UUID vindo da
+// tabela profiles (identico ao auth.uid() do aluno) — usado em toda
+// query de exercises/workout_history, nunca o telefone.
 function ProfessorPanel(props) {
   var stateStudents = useState([]); var students = stateStudents[0]; var setStudents = stateStudents[1];
   var stateLoadingStudents = useState(true); var loadingStudents = stateLoadingStudents[0]; var setLoadingStudents = stateLoadingStudents[1];
@@ -910,6 +995,8 @@ function ProfessorPanel(props) {
         setLoadingStudents(false);
         return;
       }
+
+      console.log("[professor] alunos carregados (id = UUID de profiles):", studentsResult.data.map(function (s) { return { id: s.id, name: s.name }; }));
 
       var historyResult = await supabase
         .from("workout_history")
@@ -943,6 +1030,7 @@ function ProfessorPanel(props) {
       setLoadingWorkout(true);
       setLoadingHistory(true);
 
+      // selectedStudent.id e o UUID (profiles.id) - usado como student_id em ambas as tabelas.
       var exercisesResult = await supabase.from("exercises").select("*").eq("student_id", selectedStudent.id).order("created_at", { ascending: true });
       var historyResult = await supabase.from("workout_history").select("*").eq("student_id", selectedStudent.id).order("created_at", { ascending: false }).limit(5);
 
