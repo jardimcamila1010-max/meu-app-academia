@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Check,
   LogOut,
@@ -13,79 +13,10 @@ import {
   Lock,
   User as UserIcon,
 } from "lucide-react";
+import { supabase } from "./supabaseClient.js";
 
 var LOGO_URL = "https://i.postimg.cc/NLQPwFC2/Whats-App-Image-2026-07-14-at-17-04-16.jpg";
-
-var ADMIN_EMAIL = "admin@academia.com";
-var ADMIN_PASSWORD = "professor123";
-
-var IMG_SUPINO = "https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=500&q=80";
-var IMG_COSTAS = "https://images.unsplash.com/photo-1541534741688-6078c6bfb5c5?w=500&q=80";
-var IMG_PERNAS = "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=500&q=80";
 var IMG_GERAL = "https://images.unsplash.com/photo-1583454110551-21f2fa2afe61?w=500&q=80";
-
-function emptyWorkout() {
-  return {
-    A: { subtitle: "Treino a definir", exercises: [] },
-    B: { subtitle: "Treino a definir", exercises: [] },
-    C: { subtitle: "Treino a definir", exercises: [] },
-  };
-}
-
-var INITIAL_USERS = [
-  { id: "s1", name: "Carlos Silva", phone: "(11) 98888-1234", email: "carlos@email.com", password: "123456", role: "aluno" },
-  { id: "s2", name: "Fernanda Souza", phone: "(11) 97777-2345", email: "fernanda@email.com", password: "123456", role: "aluno" },
-];
-
-var INITIAL_WORKOUTS = {
-  s1: {
-    A: {
-      subtitle: "Peito e Triceps",
-      exercises: [
-        { id: "s1a1", name: "Supino Reto com Barra", sets: 4, reps: "10-12", image: IMG_SUPINO },
-        { id: "s1a2", name: "Triceps Corda", sets: 4, reps: "12-15", image: IMG_GERAL },
-      ],
-    },
-    B: {
-      subtitle: "Costas e Biceps",
-      exercises: [
-        { id: "s1b1", name: "Puxada Frontal", sets: 4, reps: "10-12", image: IMG_COSTAS },
-        { id: "s1b2", name: "Rosca Direta com Barra", sets: 4, reps: "10-12", image: IMG_GERAL },
-      ],
-    },
-    C: {
-      subtitle: "Pernas e Ombro",
-      exercises: [
-        { id: "s1c1", name: "Agachamento Livre", sets: 4, reps: "8-10", image: IMG_PERNAS },
-        { id: "s1c2", name: "Leg Press 45", sets: 4, reps: "10-12", image: IMG_PERNAS },
-      ],
-    },
-  },
-  s2: {
-    A: {
-      subtitle: "Corpo Todo - Resistencia",
-      exercises: [
-        { id: "s2a1", name: "Flexao de Braco", sets: 3, reps: "12-15", image: IMG_GERAL },
-        { id: "s2a2", name: "Prancha Abdominal", sets: 3, reps: "40s", image: IMG_GERAL },
-      ],
-    },
-    B: {
-      subtitle: "Inferiores e Gluteos",
-      exercises: [
-        { id: "s2b1", name: "Agachamento Bulgaro", sets: 3, reps: "10-12", image: IMG_PERNAS },
-        { id: "s2b2", name: "Elevacao Pelvica", sets: 4, reps: "12-15", image: IMG_PERNAS },
-      ],
-    },
-    C: {
-      subtitle: "Cardio e Core",
-      exercises: [
-        { id: "s2c1", name: "Bicicleta Ergometrica", sets: 1, reps: "20 min", image: IMG_GERAL },
-        { id: "s2c2", name: "Abdominal Infra", sets: 3, reps: "15-20", image: IMG_GERAL },
-      ],
-    },
-  },
-};
-
 var TABS = ["A", "B", "C"];
 
 var C = {
@@ -125,6 +56,16 @@ var plainInputStyle = {
   outline: "none",
 };
 
+// Agrupa a lista plana de exercicios (vinda do Supabase) em { A: [...], B: [...], C: [...] }
+function groupByTab(rows) {
+  var grouped = { A: [], B: [], C: [] };
+  for (var i = 0; i < rows.length; i++) {
+    var row = rows[i];
+    if (grouped[row.workout_tab]) grouped[row.workout_tab].push(row);
+  }
+  return grouped;
+}
+
 function IconField(props) {
   return (
     <div style={{ position: "relative", marginBottom: 10 }}>
@@ -145,23 +86,16 @@ function IconField(props) {
 
 function Avatar(props) {
   var size = props.size || 40;
-  var parts = props.name.split(" ");
+  var parts = (props.name || "").split(" ");
   var initials = ((parts[0] ? parts[0][0] : "") + (parts[1] ? parts[1][0] : "")).toUpperCase();
   return (
     <div
       style={{
-        width: size,
-        height: size,
-        borderRadius: "50%",
+        width: size, height: size, borderRadius: "50%",
         background: "linear-gradient(135deg, " + C.blueDim + ", " + C.blueDeep + ")",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        color: C.white,
-        fontWeight: 700,
-        fontSize: size * 0.38,
-        border: "1px solid " + C.border,
-        flexShrink: 0,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        color: C.white, fontWeight: 700, fontSize: size * 0.38,
+        border: "1px solid " + C.border, flexShrink: 0,
       }}
     >
       {initials}
@@ -169,7 +103,6 @@ function Avatar(props) {
   );
 }
 
-// Marca oficial da academia. Usa a logo real via LOGO_URL.
 function Logo(props) {
   var small = props.small;
   return (
@@ -177,15 +110,7 @@ function Logo(props) {
       <img
         src={LOGO_URL}
         alt="Phisic Form"
-        style={{
-          width: small ? 64 : 84,
-          height: small ? 64 : 84,
-          margin: "0 auto 12px",
-          borderRadius: 16,
-          objectFit: "cover",
-          border: "1px solid " + C.border,
-          display: "block",
-        }}
+        style={{ width: small ? 64 : 84, height: small ? 64 : 84, margin: "0 auto 12px", borderRadius: 16, objectFit: "cover", border: "1px solid " + C.border, display: "block" }}
       />
       <h1 style={{ color: C.white, fontSize: small ? 20 : 24, fontWeight: 800, letterSpacing: 1, margin: 0, textTransform: "uppercase" }}>
         Phisic Form
@@ -195,18 +120,11 @@ function Logo(props) {
   );
 }
 
-// Barra de marca compacta usada no topo dos paineis (aluno e professor).
 function TopBrandBar() {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px 18px 0" }}>
-      <img
-        src={LOGO_URL}
-        alt="Phisic Form"
-        style={{ width: 24, height: 24, borderRadius: 6, objectFit: "cover", border: "1px solid " + C.border }}
-      />
-      <span style={{ color: C.silverDim, fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase" }}>
-        Phisic Form
-      </span>
+      <img src={LOGO_URL} alt="Phisic Form" style={{ width: 24, height: 24, borderRadius: 6, objectFit: "cover", border: "1px solid " + C.border }} />
+      <span style={{ color: C.silverDim, fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase" }}>Phisic Form</span>
     </div>
   );
 }
@@ -224,6 +142,15 @@ function BackButton(props) {
     <button onClick={props.onClick} style={{ alignSelf: "flex-start", display: "flex", alignItems: "center", gap: 6, background: "transparent", border: "none", color: C.silverDim, fontSize: 13, cursor: "pointer", marginBottom: 16 }}>
       <ArrowLeft size={15} /> Voltar
     </button>
+  );
+}
+
+function LoadingScreen() {
+  return (
+    <Shell>
+      <Logo />
+      <p style={{ color: C.silverDim, fontSize: 13 }}>Carregando...</p>
+    </Shell>
   );
 }
 
@@ -247,41 +174,38 @@ function WelcomeScreen(props) {
 }
 
 function LoginScreen(props) {
-  var users = props.users;
-  var stateEmail = useState("");
-  var email = stateEmail[0];
-  var setEmail = stateEmail[1];
-  var statePassword = useState("");
-  var password = statePassword[0];
-  var setPassword = statePassword[1];
-  var stateError = useState("");
-  var error = stateError[0];
-  var setError = stateError[1];
+  var stateEmail = useState(""); var email = stateEmail[0]; var setEmail = stateEmail[1];
+  var statePassword = useState(""); var password = statePassword[0]; var setPassword = statePassword[1];
+  var stateError = useState(""); var error = stateError[0]; var setError = stateError[1];
+  var stateBusy = useState(false); var busy = stateBusy[0]; var setBusy = stateBusy[1];
 
-  function submit(e) {
+  async function submit(e) {
     e.preventDefault();
-    var cleanEmail = email.trim().toLowerCase();
+    setError("");
+    setBusy(true);
 
-    if (cleanEmail === ADMIN_EMAIL && password === ADMIN_PASSWORD) {
-      setError("");
-      props.onLoginSuccess({ role: "professor" });
+    var result = await supabase.auth.signInWithPassword({
+      email: email.trim().toLowerCase(),
+      password: password,
+    });
+
+    if (result.error) {
+      setBusy(false);
+      setError("E-mail ou senha incorretos.");
       return;
     }
 
-    var match = null;
-    for (var i = 0; i < users.length; i++) {
-      if (users[i].email.toLowerCase() === cleanEmail && users[i].password === password) {
-        match = users[i];
-        break;
-      }
+    var userId = result.data.user.id;
+    var profileResult = await supabase.from("profiles").select("*").eq("id", userId).single();
+
+    setBusy(false);
+
+    if (profileResult.error || !profileResult.data) {
+      setError("Nao foi possivel carregar o perfil desta conta.");
+      return;
     }
 
-    if (match) {
-      setError("");
-      props.onLoginSuccess({ role: "aluno", user: match });
-    } else {
-      setError("E-mail ou senha incorretos.");
-    }
+    props.onLoginSuccess(profileResult.data);
   }
 
   return (
@@ -294,63 +218,71 @@ function LoginScreen(props) {
 
         {error ? <p style={{ color: C.danger, fontSize: 12.5, margin: "0 0 10px" }}>{error}</p> : null}
 
-        <button type="submit" style={{ width: "100%", background: C.blue, border: "none", borderRadius: 8, color: C.white, fontSize: 14, fontWeight: 700, padding: "12px 0", cursor: "pointer", marginTop: 4 }}>
-          Entrar
+        <button type="submit" disabled={busy} style={{ width: "100%", background: C.blue, border: "none", borderRadius: 8, color: C.white, fontSize: 14, fontWeight: 700, padding: "12px 0", cursor: "pointer", marginTop: 4, opacity: busy ? 0.7 : 1 }}>
+          {busy ? "Entrando..." : "Entrar"}
         </button>
       </form>
       <p style={{ color: C.silverDim, fontSize: 12.5, marginTop: 18 }}>
         Nao tem conta?{" "}
-        <span onClick={props.onGoSignup} style={{ color: C.blue, fontWeight: 700, cursor: "pointer" }}>
-          Criar conta
-        </span>
+        <span onClick={props.onGoSignup} style={{ color: C.blue, fontWeight: 700, cursor: "pointer" }}>Criar conta</span>
       </p>
     </Shell>
   );
 }
 
 function SignupScreen(props) {
-  var users = props.users;
-  var stateName = useState("");
-  var name = stateName[0];
-  var setName = stateName[1];
-  var statePhone = useState("");
-  var phone = statePhone[0];
-  var setPhone = statePhone[1];
-  var stateEmail = useState("");
-  var email = stateEmail[0];
-  var setEmail = stateEmail[1];
-  var statePassword = useState("");
-  var password = statePassword[0];
-  var setPassword = statePassword[1];
-  var stateError = useState("");
-  var error = stateError[0];
-  var setError = stateError[1];
+  var stateName = useState(""); var name = stateName[0]; var setName = stateName[1];
+  var statePhone = useState(""); var phone = statePhone[0]; var setPhone = statePhone[1];
+  var stateEmail = useState(""); var email = stateEmail[0]; var setEmail = stateEmail[1];
+  var statePassword = useState(""); var password = statePassword[0]; var setPassword = statePassword[1];
+  var stateError = useState(""); var error = stateError[0]; var setError = stateError[1];
+  var stateInfo = useState(""); var info = stateInfo[0]; var setInfo = stateInfo[1];
+  var stateBusy = useState(false); var busy = stateBusy[0]; var setBusy = stateBusy[1];
 
-  function submit(e) {
+  async function submit(e) {
     e.preventDefault();
+    setError("");
+    setInfo("");
+
     if (!name.trim() || !phone.trim() || !email.trim() || !password.trim()) {
       setError("Preencha todos os campos.");
       return;
     }
+
+    setBusy(true);
     var cleanEmail = email.trim().toLowerCase();
-    var taken = cleanEmail === ADMIN_EMAIL;
-    for (var i = 0; i < users.length; i++) {
-      if (users[i].email.toLowerCase() === cleanEmail) taken = true;
-    }
-    if (taken) {
-      setError("Ja existe uma conta com este e-mail.");
+
+    var signUpResult = await supabase.auth.signUp({
+      email: cleanEmail,
+      password: password,
+    });
+
+    if (signUpResult.error) {
+      setBusy(false);
+      setError(signUpResult.error.message);
       return;
     }
 
-    var newUser = {
-      id: "s" + Date.now(),
-      name: name.trim(),
-      phone: phone.trim(),
-      email: cleanEmail,
-      password: password,
-      role: "aluno",
-    };
-    props.onSignupSuccess(newUser);
+    var userId = signUpResult.data.user.id;
+
+    var profileResult = await supabase.from("profiles").insert([
+      { id: userId, name: name.trim(), phone: phone.trim(), role: "aluno" },
+    ]);
+
+    setBusy(false);
+
+    if (profileResult.error) {
+      setError("Conta criada, mas houve um erro ao salvar o perfil: " + profileResult.error.message);
+      return;
+    }
+
+    if (signUpResult.data.session) {
+      // Login automatico ja aconteceu (confirmacao de e-mail desativada no projeto)
+      props.onSignupSuccess({ id: userId, name: name.trim(), phone: phone.trim(), role: "aluno" });
+    } else {
+      // Projeto exige confirmacao de e-mail antes do primeiro login
+      setInfo("Conta criada! Confirme seu e-mail e depois faca login.");
+    }
   }
 
   return (
@@ -365,9 +297,10 @@ function SignupScreen(props) {
         <IconField icon={<Lock size={16} />} type="password" placeholder="Senha" value={password} onChange={function (e) { setPassword(e.target.value); }} />
 
         {error ? <p style={{ color: C.danger, fontSize: 12.5, margin: "0 0 10px" }}>{error}</p> : null}
+        {info ? <p style={{ color: C.blue, fontSize: 12.5, margin: "0 0 10px" }}>{info}</p> : null}
 
-        <button type="submit" style={{ width: "100%", background: C.blue, border: "none", borderRadius: 8, color: C.white, fontSize: 14, fontWeight: 700, padding: "12px 0", cursor: "pointer", marginTop: 4 }}>
-          Criar conta
+        <button type="submit" disabled={busy} style={{ width: "100%", background: C.blue, border: "none", borderRadius: 8, color: C.white, fontSize: 14, fontWeight: 700, padding: "12px 0", cursor: "pointer", marginTop: 4, opacity: busy ? 0.7 : 1 }}>
+          {busy ? "Criando..." : "Criar conta"}
         </button>
       </form>
     </Shell>
@@ -387,11 +320,7 @@ function StudentPicker(props) {
         ) : null}
         {students.map(function (s) {
           return (
-            <button
-              key={s.id}
-              onClick={function () { props.onPick(s); }}
-              style={{ display: "flex", alignItems: "center", gap: 12, background: C.panel, border: "1px solid " + C.border, borderRadius: 12, padding: "12px 14px", cursor: "pointer", textAlign: "left" }}
-            >
+            <button key={s.id} onClick={function () { props.onPick(s); }} style={{ display: "flex", alignItems: "center", gap: 12, background: C.panel, border: "1px solid " + C.border, borderRadius: 12, padding: "12px 14px", cursor: "pointer", textAlign: "left" }}>
               <Avatar name={s.name} />
               <span style={{ color: C.white, fontSize: 15, fontWeight: 600, flex: 1 }}>{s.name}</span>
               <ChevronRight size={18} color={C.silverDim} />
@@ -404,14 +333,12 @@ function StudentPicker(props) {
 }
 
 function ProgressBar(props) {
-  var done = props.done;
-  var total = props.total;
-  var pct = total === 0 ? 0 : Math.round((done / total) * 100);
+  var pct = props.total === 0 ? 0 : Math.round((props.done / props.total) * 100);
   return (
     <div style={{ marginBottom: 20 }}>
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
         <span style={{ color: C.silverDim, fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>Progresso de hoje</span>
-        <span style={{ color: C.blue, fontSize: 13, fontWeight: 700 }}>{done}/{total} - {pct}%</span>
+        <span style={{ color: C.blue, fontSize: 13, fontWeight: 700 }}>{props.done}/{props.total} - {pct}%</span>
       </div>
       <div style={{ width: "100%", height: 8, background: C.panelAlt, borderRadius: 6, overflow: "hidden", border: "1px solid " + C.border }}>
         <div style={{ width: pct + "%", height: "100%", background: "linear-gradient(90deg, " + C.blueDim + ", " + C.blue + ")", borderRadius: 6, transition: "width 0.3s ease" }} />
@@ -422,27 +349,13 @@ function ProgressBar(props) {
 
 function ExerciseCard(props) {
   var ex = props.ex;
-  var stateImgError = useState(false);
-  var imgError = stateImgError[0];
-  var setImgError = stateImgError[1];
+  var stateImgError = useState(false); var imgError = stateImgError[0]; var setImgError = stateImgError[1];
 
   return (
-    <div
-      style={{
-        background: props.checked ? "rgba(47,134,198,0.08)" : C.panel,
-        border: "1px solid " + (props.checked ? C.blueDim : C.border),
-        borderRadius: 14,
-        overflow: "hidden",
-      }}
-    >
+    <div style={{ background: props.checked ? "rgba(47,134,198,0.08)" : C.panel, border: "1px solid " + (props.checked ? C.blueDim : C.border), borderRadius: 14, overflow: "hidden" }}>
       <div style={{ width: "100%", height: 160, background: C.panelAlt }}>
         {ex.image && !imgError ? (
-          <img
-            src={ex.image}
-            alt={ex.name}
-            onError={function () { setImgError(true); }}
-            style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-          />
+          <img src={ex.image} alt={ex.name} onError={function () { setImgError(true); }} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
         ) : (
           <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
             <ImageIcon size={32} color={C.silverDim} />
@@ -459,9 +372,7 @@ function ExerciseCard(props) {
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <label style={{ color: C.silverDim, fontSize: 12 }}>Carga</label>
             <input
-              type="number"
-              inputMode="decimal"
-              placeholder="0"
+              type="number" inputMode="decimal" placeholder="0"
               value={props.weight === undefined ? "" : props.weight}
               onChange={function (e) { props.onWeightChange(ex.id, e.target.value); }}
               style={{ width: 56, background: C.bg, border: "1px solid " + C.border, borderRadius: 6, color: C.white, fontSize: 13, padding: "4px 6px", outline: "none" }}
@@ -470,11 +381,7 @@ function ExerciseCard(props) {
           </div>
         </div>
 
-        <button
-          onClick={function () { props.onToggle(ex.id); }}
-          aria-label="Marcar exercicio"
-          style={{ width: 38, height: 38, borderRadius: "50%", border: "2px solid " + (props.checked ? C.blue : C.border), background: props.checked ? C.blue : "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}
-        >
+        <button onClick={function () { props.onToggle(ex.id); }} aria-label="Marcar exercicio" style={{ width: 38, height: 38, borderRadius: "50%", border: "2px solid " + (props.checked ? C.blue : C.border), background: props.checked ? C.blue : "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>
           <Check size={18} color={props.checked ? C.white : C.silverDim} strokeWidth={3} />
         </button>
       </div>
@@ -482,19 +389,30 @@ function ExerciseCard(props) {
   );
 }
 
+// Painel do aluno: busca os exercicios direto da tabela `exercises`, filtrando por student_id.
 function AlunoDashboard(props) {
   var student = props.student;
-  var stateTab = useState("A");
-  var tab = stateTab[0];
-  var setTab = stateTab[1];
-  var stateChecked = useState({});
-  var checkedMap = stateChecked[0];
-  var setCheckedMap = stateChecked[1];
-  var stateWeights = useState({});
-  var weights = stateWeights[0];
-  var setWeights = stateWeights[1];
+  var stateTab = useState("A"); var tab = stateTab[0]; var setTab = stateTab[1];
+  var stateWorkout = useState({ A: [], B: [], C: [] }); var workout = stateWorkout[0]; var setWorkout = stateWorkout[1];
+  var stateLoading = useState(true); var loading = stateLoading[0]; var setLoading = stateLoading[1];
+  var stateChecked = useState({}); var checkedMap = stateChecked[0]; var setCheckedMap = stateChecked[1];
+  var stateWeights = useState({}); var weights = stateWeights[0]; var setWeights = stateWeights[1];
 
-  var myWorkout = props.workoutsByStudent[student.id] || emptyWorkout();
+  useEffect(function () {
+    var cancelled = false;
+    async function loadExercises() {
+      setLoading(true);
+      var result = await supabase.from("exercises").select("*").eq("student_id", student.id).order("created_at", { ascending: true });
+      if (!cancelled) {
+        if (!result.error && result.data) {
+          setWorkout(groupByTab(result.data));
+        }
+        setLoading(false);
+      }
+    }
+    loadExercises();
+    return function () { cancelled = true; };
+  }, [student.id]);
 
   function toggle(exId) {
     var key = student.id + "-" + tab + "-" + exId;
@@ -513,7 +431,7 @@ function AlunoDashboard(props) {
     });
   }
 
-  var list = myWorkout[tab].exercises;
+  var list = workout[tab];
   var doneCount = 0;
   for (var i = 0; i < list.length; i++) {
     if (checkedMap[student.id + "-" + tab + "-" + list[i].id]) doneCount++;
@@ -526,19 +444,13 @@ function AlunoDashboard(props) {
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <Avatar name={student.name} size={38} />
           <div>
-            <p style={{ color: C.white, fontSize: 15, fontWeight: 800, margin: 0 }}>
-              Treino de {student.name.split(" ")[0]}
-            </p>
+            <p style={{ color: C.white, fontSize: 15, fontWeight: 800, margin: 0 }}>Treino de {student.name.split(" ")[0]}</p>
             <p style={{ color: C.silverDim, fontSize: 11.5, margin: 0, display: "flex", alignItems: "center", gap: 4 }}>
               <Phone size={11} /> {student.phone}
             </p>
           </div>
         </div>
-        <button
-          onClick={props.onExit}
-          aria-label="Sair"
-          style={{ width: 34, height: 34, borderRadius: 8, border: "1px solid " + C.border, background: C.panel, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
-        >
+        <button onClick={props.onExit} aria-label="Sair" style={{ width: 34, height: 34, borderRadius: 8, border: "1px solid " + C.border, background: C.panel, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
           <LogOut size={16} color={C.silverDim} />
         </button>
       </div>
@@ -547,11 +459,7 @@ function AlunoDashboard(props) {
         {TABS.map(function (k) {
           var active = k === tab;
           return (
-            <button
-              key={k}
-              onClick={function () { setTab(k); }}
-              style={{ flex: 1, padding: "10px 8px", borderRadius: 10, border: "1px solid " + (active ? C.blue : C.border), background: active ? C.blueDeep : C.panel, color: active ? C.white : C.silverDim, fontWeight: 700, fontSize: 13, cursor: "pointer" }}
-            >
+            <button key={k} onClick={function () { setTab(k); }} style={{ flex: 1, padding: "10px 8px", borderRadius: 10, border: "1px solid " + (active ? C.blue : C.border), background: active ? C.blueDeep : C.panel, color: active ? C.white : C.silverDim, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
               Treino {k}
             </button>
           );
@@ -561,32 +469,36 @@ function AlunoDashboard(props) {
       <div style={{ padding: "16px 18px 0" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
           <Flame size={16} color={C.blue} />
-          <h2 style={{ color: C.white, fontSize: 16, fontWeight: 800, margin: 0 }}>{myWorkout[tab].subtitle}</h2>
+          <h2 style={{ color: C.white, fontSize: 16, fontWeight: 800, margin: 0 }}>Treino {tab}</h2>
         </div>
 
         <ProgressBar done={doneCount} total={list.length} />
 
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          {list.length === 0 ? (
-            <p style={{ color: C.silverDim, fontSize: 13, textAlign: "center", padding: "20px 0" }}>
-              Nenhum exercicio cadastrado neste treino ainda.
-            </p>
-          ) : null}
-          {list.map(function (ex) {
-            return (
-              <ExerciseCard
-                key={ex.id}
-                ex={ex}
-                checked={!!checkedMap[student.id + "-" + tab + "-" + ex.id]}
-                weight={weights[student.id + "-" + tab + "-" + ex.id]}
-                onToggle={toggle}
-                onWeightChange={setWeight}
-              />
-            );
-          })}
-        </div>
+        {loading ? (
+          <p style={{ color: C.silverDim, fontSize: 13, textAlign: "center", padding: "20px 0" }}>Carregando treino...</p>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {list.length === 0 ? (
+              <p style={{ color: C.silverDim, fontSize: 13, textAlign: "center", padding: "20px 0" }}>
+                Nenhum exercicio cadastrado neste treino ainda.
+              </p>
+            ) : null}
+            {list.map(function (ex) {
+              return (
+                <ExerciseCard
+                  key={ex.id}
+                  ex={ex}
+                  checked={!!checkedMap[student.id + "-" + tab + "-" + ex.id]}
+                  weight={weights[student.id + "-" + tab + "-" + ex.id]}
+                  onToggle={toggle}
+                  onWeightChange={setWeight}
+                />
+              );
+            })}
+          </div>
+        )}
 
-        {list.length > 0 && doneCount === list.length ? (
+        {!loading && list.length > 0 && doneCount === list.length ? (
           <div style={{ marginTop: 16, padding: "12px 14px", borderRadius: 10, background: "rgba(47,134,198,0.12)", border: "1px solid " + C.blueDim, color: C.white, fontSize: 13, fontWeight: 700, textAlign: "center" }}>
             Treino {tab} concluido. Bom trabalho!
           </div>
@@ -596,62 +508,100 @@ function AlunoDashboard(props) {
   );
 }
 
+// Painel do professor: le a lista de alunos de `profiles` (role = aluno)
+// e gerencia os exercicios daquele aluno na tabela `exercises`.
 function ProfessorPanel(props) {
-  var stateTab = useState("A");
-  var tab = stateTab[0];
-  var setTab = stateTab[1];
-  var stateName = useState("");
-  var newName = stateName[0];
-  var setNewName = stateName[1];
-  var stateSets = useState("3");
-  var newSets = stateSets[0];
-  var setNewSets = stateSets[1];
-  var stateReps = useState("10-12");
-  var newReps = stateReps[0];
-  var setNewReps = stateReps[1];
-  var stateImage = useState("");
-  var newImage = stateImage[0];
-  var setNewImage = stateImage[1];
+  var stateStudents = useState([]); var students = stateStudents[0]; var setStudents = stateStudents[1];
+  var stateLoadingStudents = useState(true); var loadingStudents = stateLoadingStudents[0]; var setLoadingStudents = stateLoadingStudents[1];
 
-  var students = [];
-  for (var i = 0; i < props.users.length; i++) {
-    if (props.users[i].role === "aluno") students.push(props.users[i]);
-  }
+  var stateSelected = useState(null); var selectedStudent = stateSelected[0]; var setSelectedStudent = stateSelected[1];
+  var stateTab = useState("A"); var tab = stateTab[0]; var setTab = stateTab[1];
+  var stateWorkout = useState({ A: [], B: [], C: [] }); var workout = stateWorkout[0]; var setWorkout = stateWorkout[1];
+  var stateLoadingWorkout = useState(false); var loadingWorkout = stateLoadingWorkout[0]; var setLoadingWorkout = stateLoadingWorkout[1];
 
-  var selectedStudent = props.selectedStudent;
+  var stateName = useState(""); var newName = stateName[0]; var setNewName = stateName[1];
+  var stateSets = useState("3"); var newSets = stateSets[0]; var setNewSets = stateSets[1];
+  var stateReps = useState("10-12"); var newReps = stateReps[0]; var setNewReps = stateReps[1];
+  var stateImage = useState(""); var newImage = stateImage[0]; var setNewImage = stateImage[1];
+
+  useEffect(function () {
+    async function loadStudents() {
+      setLoadingStudents(true);
+      var result = await supabase.from("profiles").select("*").eq("role", "aluno");
+      if (!result.error && result.data) setStudents(result.data);
+      setLoadingStudents(false);
+    }
+    loadStudents();
+  }, []);
+
+  useEffect(function () {
+    if (!selectedStudent) return;
+    var cancelled = false;
+    async function loadWorkout() {
+      setLoadingWorkout(true);
+      var result = await supabase.from("exercises").select("*").eq("student_id", selectedStudent.id).order("created_at", { ascending: true });
+      if (!cancelled) {
+        if (!result.error && result.data) setWorkout(groupByTab(result.data));
+        setLoadingWorkout(false);
+      }
+    }
+    loadWorkout();
+    return function () { cancelled = true; };
+  }, [selectedStudent]);
 
   if (!selectedStudent) {
-    return <StudentPicker title="Selecione o aluno para editar o treino" onPick={props.onChangeStudent} onBack={props.onExit} students={students} />;
+    return (
+      <StudentPicker
+        title={loadingStudents ? "Carregando alunos..." : "Selecione o aluno para editar o treino"}
+        onPick={setSelectedStudent}
+        onBack={props.onExit}
+        students={students}
+      />
+    );
   }
 
-  var workout = props.workoutsByStudent[selectedStudent.id] || emptyWorkout();
-  var list = workout[tab].exercises;
+  var list = workout[tab];
 
-  function addExercise() {
+  async function addExercise() {
     if (!newName.trim()) return;
-    var newEx = {
-      id: selectedStudent.id + "-" + tab + "-" + Date.now(),
+    var payload = {
+      student_id: selectedStudent.id,
+      workout_tab: tab,
       name: newName.trim(),
       sets: Number(newSets) || 1,
       reps: newReps.trim() || "-",
       image: newImage.trim() || IMG_GERAL,
     };
-    props.onUpdateWorkout(selectedStudent.id, tab, list.concat([newEx]));
-    setNewName("");
-    setNewSets("3");
-    setNewReps("10-12");
-    setNewImage("");
+    var result = await supabase.from("exercises").insert([payload]).select();
+    if (!result.error && result.data) {
+      setWorkout(function (prev) {
+        var next = Object.assign({}, prev);
+        next[tab] = next[tab].concat(result.data);
+        return next;
+      });
+      setNewName("");
+      setNewSets("3");
+      setNewReps("10-12");
+      setNewImage("");
+    }
   }
 
-  function deleteExercise(exId) {
-    props.onUpdateWorkout(selectedStudent.id, tab, list.filter(function (e) { return e.id !== exId; }));
+  async function deleteExercise(exId) {
+    var result = await supabase.from("exercises").delete().eq("id", exId);
+    if (!result.error) {
+      setWorkout(function (prev) {
+        var next = Object.assign({}, prev);
+        next[tab] = next[tab].filter(function (e) { return e.id !== exId; });
+        return next;
+      });
+    }
   }
 
   return (
     <div style={{ minHeight: 600, background: C.bg, fontFamily: "system-ui, sans-serif", paddingBottom: 30 }}>
       <TopBrandBar />
       <div style={{ padding: "12px 18px 0", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <button onClick={function () { props.onChangeStudent(null); }} style={{ display: "flex", alignItems: "center", gap: 6, background: "transparent", border: "none", color: C.silverDim, fontSize: 12.5, cursor: "pointer" }}>
+        <button onClick={function () { setSelectedStudent(null); }} style={{ display: "flex", alignItems: "center", gap: 6, background: "transparent", border: "none", color: C.silverDim, fontSize: 12.5, cursor: "pointer" }}>
           <ArrowLeft size={14} /> Trocar aluno
         </button>
         <button onClick={props.onExit} aria-label="Sair" style={{ width: 34, height: 34, borderRadius: 8, border: "1px solid " + C.border, background: C.panel, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
@@ -671,11 +621,7 @@ function ProfessorPanel(props) {
         {TABS.map(function (k) {
           var active = k === tab;
           return (
-            <button
-              key={k}
-              onClick={function () { setTab(k); }}
-              style={{ flex: 1, padding: "10px 8px", borderRadius: 10, border: "1px solid " + (active ? C.blue : C.border), background: active ? C.blueDeep : C.panel, color: active ? C.white : C.silverDim, fontWeight: 700, fontSize: 13, cursor: "pointer" }}
-            >
+            <button key={k} onClick={function () { setTab(k); }} style={{ flex: 1, padding: "10px 8px", borderRadius: 10, border: "1px solid " + (active ? C.blue : C.border), background: active ? C.blueDeep : C.panel, color: active ? C.white : C.silverDim, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
               Treino {k}
             </button>
           );
@@ -683,33 +629,31 @@ function ProfessorPanel(props) {
       </div>
 
       <div style={{ padding: "16px 18px 0" }}>
-        <p style={{ color: C.silverDim, fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10 }}>{workout[tab].subtitle}</p>
-
-        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
-          {list.length === 0 ? (
-            <p style={{ color: C.silverDim, fontSize: 13, textAlign: "center", padding: "12px 0" }}>Nenhum exercicio neste treino. Adicione um abaixo.</p>
-          ) : null}
-          {list.map(function (ex) {
-            return (
-              <div key={ex.id} style={{ display: "flex", alignItems: "center", gap: 10, background: C.panel, border: "1px solid " + C.border, borderRadius: 12, padding: "10px 12px" }}>
-                <div style={{ width: 44, height: 44, borderRadius: 8, overflow: "hidden", flexShrink: 0, background: C.panelAlt }}>
-                  <img src={ex.image || IMG_GERAL} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+        {loadingWorkout ? (
+          <p style={{ color: C.silverDim, fontSize: 13, textAlign: "center", padding: "12px 0" }}>Carregando exercicios...</p>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
+            {list.length === 0 ? (
+              <p style={{ color: C.silverDim, fontSize: 13, textAlign: "center", padding: "12px 0" }}>Nenhum exercicio neste treino. Adicione um abaixo.</p>
+            ) : null}
+            {list.map(function (ex) {
+              return (
+                <div key={ex.id} style={{ display: "flex", alignItems: "center", gap: 10, background: C.panel, border: "1px solid " + C.border, borderRadius: 12, padding: "10px 12px" }}>
+                  <div style={{ width: 44, height: 44, borderRadius: 8, overflow: "hidden", flexShrink: 0, background: C.panelAlt }}>
+                    <img src={ex.image || IMG_GERAL} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ color: C.white, fontSize: 13.5, fontWeight: 700, margin: 0 }}>{ex.name}</p>
+                    <p style={{ color: C.silverDim, fontSize: 12, margin: 0 }}>{ex.sets} series x {ex.reps} reps</p>
+                  </div>
+                  <button onClick={function () { deleteExercise(ex.id); }} aria-label="Excluir exercicio" style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid " + C.border, background: "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>
+                    <Trash2 size={15} color={C.danger} />
+                  </button>
                 </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ color: C.white, fontSize: 13.5, fontWeight: 700, margin: 0 }}>{ex.name}</p>
-                  <p style={{ color: C.silverDim, fontSize: 12, margin: 0 }}>{ex.sets} series x {ex.reps} reps</p>
-                </div>
-                <button
-                  onClick={function () { deleteExercise(ex.id); }}
-                  aria-label="Excluir exercicio"
-                  style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid " + C.border, background: "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}
-                >
-                  <Trash2 size={15} color={C.danger} />
-                </button>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
 
         <div style={{ background: C.panelAlt, border: "1px solid " + C.border, borderRadius: 12, padding: 12 }}>
           <p style={{ color: C.silverDim, fontSize: 11.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, margin: "0 0 8px" }}>Adicionar exercicio</p>
@@ -719,10 +663,7 @@ function ProfessorPanel(props) {
             <input type="text" placeholder="Repeticoes (ex: 10-12)" value={newReps} onChange={function (e) { setNewReps(e.target.value); }} style={Object.assign({}, plainInputStyle, { flex: 1 })} />
           </div>
           <input type="text" placeholder="URL da imagem/GIF (opcional)" value={newImage} onChange={function (e) { setNewImage(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 10 })} />
-          <button
-            onClick={addExercise}
-            style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: C.blue, border: "none", borderRadius: 8, color: C.white, fontSize: 13, fontWeight: 700, padding: "10px 0", cursor: "pointer" }}
-          >
+          <button onClick={addExercise} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: C.blue, border: "none", borderRadius: 8, color: C.white, fontSize: 13, fontWeight: 700, padding: "10px 0", cursor: "pointer" }}>
             <Plus size={15} /> Adicionar
           </button>
         </div>
@@ -732,85 +673,62 @@ function ProfessorPanel(props) {
 }
 
 export default function App() {
-  var stateScreen = useState("welcome");
-  var screen = stateScreen[0];
-  var setScreen = stateScreen[1];
+  var stateScreen = useState("loading"); var screen = stateScreen[0]; var setScreen = stateScreen[1];
+  var stateRole = useState(null); var currentRole = stateRole[0]; var setCurrentRole = stateRole[1];
+  var stateProfile = useState(null); var currentProfile = stateProfile[0]; var setCurrentProfile = stateProfile[1];
+  var stateTeacherStudent = useState(null); var teacherStudent = stateTeacherStudent[0]; var setTeacherStudent = stateTeacherStudent[1];
 
-  var stateUsers = useState(INITIAL_USERS);
-  var users = stateUsers[0];
-  var setUsers = stateUsers[1];
-
-  var stateWorkouts = useState(INITIAL_WORKOUTS);
-  var workoutsByStudent = stateWorkouts[0];
-  var setWorkoutsByStudent = stateWorkouts[1];
-
-  var stateRole = useState(null);
-  var currentRole = stateRole[0];
-  var setCurrentRole = stateRole[1];
-
-  var stateLoggedStudent = useState(null);
-  var loggedStudent = stateLoggedStudent[0];
-  var setLoggedStudent = stateLoggedStudent[1];
-
-  var stateTeacherStudent = useState(null);
-  var teacherStudent = stateTeacherStudent[0];
-  var setTeacherStudent = stateTeacherStudent[1];
-
-  function updateWorkout(studentId, tab, newExerciseList) {
-    setWorkoutsByStudent(function (prev) {
-      var next = Object.assign({}, prev);
-      var current = next[studentId] || emptyWorkout();
-      var updatedTab = Object.assign({}, current[tab], { exercises: newExerciseList });
-      next[studentId] = Object.assign({}, current);
-      next[studentId][tab] = updatedTab;
-      return next;
-    });
-  }
-
-  function handleLoginSuccess(result) {
-    setCurrentRole(result.role);
-    if (result.role === "aluno") {
-      setLoggedStudent(result.user);
+  // Ao carregar o app, verifica se ja existe uma sessao Supabase ativa (usuario ja logado antes).
+  useEffect(function () {
+    async function restoreSession() {
+      var sessionResult = await supabase.auth.getSession();
+      var session = sessionResult.data.session;
+      if (!session) {
+        setScreen("welcome");
+        return;
+      }
+      var profileResult = await supabase.from("profiles").select("*").eq("id", session.user.id).single();
+      if (profileResult.error || !profileResult.data) {
+        setScreen("welcome");
+        return;
+      }
+      setCurrentProfile(profileResult.data);
+      setCurrentRole(profileResult.data.role);
+      setScreen("app");
     }
+    restoreSession();
+  }, []);
+
+  function handleAuthSuccess(profile) {
+    setCurrentProfile(profile);
+    setCurrentRole(profile.role);
     setScreen("app");
   }
 
-  function handleSignupSuccess(newUser) {
-    setUsers(function (prev) { return prev.concat([newUser]); });
-    setWorkoutsByStudent(function (prev) {
-      var next = Object.assign({}, prev);
-      next[newUser.id] = emptyWorkout();
-      return next;
-    });
-    setCurrentRole("aluno");
-    setLoggedStudent(newUser);
-    setScreen("app");
-  }
-
-  function logout() {
+  async function logout() {
+    await supabase.auth.signOut();
     setCurrentRole(null);
-    setLoggedStudent(null);
+    setCurrentProfile(null);
     setTeacherStudent(null);
     setScreen("welcome");
   }
 
   var content = null;
 
-  if (screen === "welcome") {
+  if (screen === "loading") {
+    content = <LoadingScreen />;
+  } else if (screen === "welcome") {
     content = <WelcomeScreen onGoLogin={function () { setScreen("login"); }} onGoSignup={function () { setScreen("signup"); }} />;
   } else if (screen === "login") {
-    content = <LoginScreen onBack={function () { setScreen("welcome"); }} onLoginSuccess={handleLoginSuccess} onGoSignup={function () { setScreen("signup"); }} users={users} />;
+    content = <LoginScreen onBack={function () { setScreen("welcome"); }} onLoginSuccess={handleAuthSuccess} onGoSignup={function () { setScreen("signup"); }} />;
   } else if (screen === "signup") {
-    content = <SignupScreen onBack={function () { setScreen("welcome"); }} onSignupSuccess={handleSignupSuccess} users={users} />;
+    content = <SignupScreen onBack={function () { setScreen("welcome"); }} onSignupSuccess={handleAuthSuccess} />;
   } else if (currentRole === "aluno") {
-    content = <AlunoDashboard student={loggedStudent} workoutsByStudent={workoutsByStudent} onExit={logout} />;
+    content = <AlunoDashboard student={currentProfile} onExit={logout} />;
   } else {
     content = (
       <ProfessorPanel
         selectedStudent={teacherStudent}
-        users={users}
-        workoutsByStudent={workoutsByStudent}
-        onUpdateWorkout={updateWorkout}
         onChangeStudent={setTeacherStudent}
         onExit={logout}
       />
