@@ -16,6 +16,7 @@ import {
   User as UserIcon,
   PartyPopper,
   History,
+  Loader2,
 } from "lucide-react";
 import { supabase } from "./supabaseClient.js";
 
@@ -115,6 +116,17 @@ function formatTime(input) {
   var hh = String(d.getHours()).padStart(2, "0");
   var mm = String(d.getMinutes()).padStart(2, "0");
   return hh + ":" + mm;
+}
+
+// Pequeno spinner giratorio usado nos botoes durante chamadas ao Supabase.
+function Spinner(props) {
+  var size = props.size || 16;
+  return (
+    <React.Fragment>
+      <style>{"@keyframes phisic-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }"}</style>
+      <Loader2 size={size} color={props.color || C.white} style={{ animation: "phisic-spin 0.8s linear infinite" }} />
+    </React.Fragment>
+  );
 }
 
 function IconField(props) {
@@ -290,7 +302,6 @@ function LoginScreen(props) {
       return;
     }
 
-    console.log("[login] auth.uid():", userId, "| profiles.id:", profileResult.data.id);
     props.onLoginSuccess(profileResult.data);
   }
 
@@ -304,7 +315,8 @@ function LoginScreen(props) {
 
         {error ? <p style={{ color: C.danger, fontSize: 12.5, margin: "0 0 10px" }}>{error}</p> : null}
 
-        <button type="submit" disabled={busy} style={{ width: "100%", background: C.blue, border: "none", borderRadius: 8, color: C.white, fontSize: 14, fontWeight: 700, padding: "12px 0", cursor: "pointer", marginTop: 4, opacity: busy ? 0.7 : 1 }}>
+        <button type="submit" disabled={busy} style={{ width: "100%", background: C.blue, border: "none", borderRadius: 8, color: C.white, fontSize: 14, fontWeight: 700, padding: "12px 0", cursor: "pointer", marginTop: 4, opacity: busy ? 0.7 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+          {busy ? <Spinner size={15} /> : null}
           {busy ? "Entrando..." : "Entrar"}
         </button>
       </form>
@@ -383,7 +395,8 @@ function SignupScreen(props) {
         {error ? <p style={{ color: C.danger, fontSize: 12.5, margin: "0 0 10px" }}>{error}</p> : null}
         {info ? <p style={{ color: C.blue, fontSize: 12.5, margin: "0 0 10px" }}>{info}</p> : null}
 
-        <button type="submit" disabled={busy} style={{ width: "100%", background: C.blue, border: "none", borderRadius: 8, color: C.white, fontSize: 14, fontWeight: 700, padding: "12px 0", cursor: "pointer", marginTop: 4, opacity: busy ? 0.7 : 1 }}>
+        <button type="submit" disabled={busy} style={{ width: "100%", background: C.blue, border: "none", borderRadius: 8, color: C.white, fontSize: 14, fontWeight: 700, padding: "12px 0", cursor: "pointer", marginTop: 4, opacity: busy ? 0.7 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+          {busy ? <Spinner size={15} /> : null}
           {busy ? "Criando..." : "Criar conta"}
         </button>
       </form>
@@ -415,13 +428,9 @@ function StudentPicker(props) {
           }
           return (
             <button
+              // s.id e sempre o UUID vindo de profiles (== auth.uid() do aluno) - nunca o telefone.
               key={s.id}
-              onClick={function () {
-                // s.id e sempre o UUID da tabela profiles (== auth.uid() do aluno),
-                // nunca o telefone. E o que garante o vinculo correto com exercises.student_id.
-                console.log("[professor] selecionou aluno - profiles.id (UUID):", s.id, "| nome:", s.name, "| telefone (so exibicao):", s.phone);
-                props.onPick(s);
-              }}
+              onClick={function () { props.onPick(s); }}
               style={{ display: "flex", alignItems: "center", gap: 12, background: C.panel, border: "1px solid " + C.border, borderRadius: 12, padding: "12px 14px", cursor: "pointer", textAlign: "left" }}
             >
               <Avatar name={s.name} />
@@ -455,12 +464,53 @@ function ProgressBar(props) {
   );
 }
 
-// Secao "Minha Frequencia": dias da semana atual, clicaveis.
-// Ao clicar num dia com treino, mostra um balao com Treino + horario, buscando em workout_history.
+// Modal exibido ao clicar em um dia do calendario de frequencia.
+function HistoryDayModal(props) {
+  return (
+    <div
+      style={{
+        position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        padding: 20, zIndex: 60,
+      }}
+      onClick={props.onClose}
+    >
+      <div
+        onClick={function (e) { e.stopPropagation(); }}
+        style={{ width: "100%", maxWidth: 320, background: C.panel, border: "1px solid " + C.blueDim, borderRadius: 16, padding: 22 }}
+      >
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+          <p style={{ color: C.white, fontSize: 14, fontWeight: 800, margin: 0 }}>
+            Historico de {formatFriendlyDate(props.date)}
+          </p>
+          <button onClick={props.onClose} aria-label="Fechar" style={{ width: 28, height: 28, borderRadius: 8, border: "1px solid " + C.border, background: "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+            <X size={14} color={C.silverDim} />
+          </button>
+        </div>
+
+        {props.record ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 12, background: C.panelAlt, border: "1px solid " + C.border, borderRadius: 10, padding: 12 }}>
+            <div style={{ width: 40, height: 40, borderRadius: "50%", background: C.blueDeep, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <Flame size={18} color={C.blue} />
+            </div>
+            <p style={{ color: C.white, fontSize: 13.5, margin: 0 }}>
+              Voce concluiu o Treino <b>{props.record.workout_tab}</b> as <b>{formatTime(props.record.created_at)}</b>
+            </p>
+          </div>
+        ) : (
+          <p style={{ color: C.silverDim, fontSize: 13, margin: 0 }}>Nenhum treino registrado neste dia.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Secao "Minha Frequencia": dias da semana atual, clicaveis, abrindo um Modal
+// com o detalhe do treino concluido naquele dia (buscado em workout_history).
 function WeeklyFrequency(props) {
   var days = buildWeekDays(new Date());
   var today = new Date();
-  var stateSelectedDay = useState(null); var selectedDay = stateSelectedDay[0]; var setSelectedDay = stateSelectedDay[1];
+  var stateModalDay = useState(null); var modalDay = stateModalDay[0]; var setModalDay = stateModalDay[1];
 
   function findRecordForDay(d) {
     for (var j = 0; j < props.historyRecords.length; j++) {
@@ -468,15 +518,6 @@ function WeeklyFrequency(props) {
       if (isSameDate(recDate, d)) return props.historyRecords[j];
     }
     return null;
-  }
-
-  function handleDayClick(d) {
-    var record = findRecordForDay(d);
-    if (!record) {
-      setSelectedDay(null);
-      return;
-    }
-    setSelectedDay({ date: d, record: record });
   }
 
   return (
@@ -492,10 +533,10 @@ function WeeklyFrequency(props) {
           return (
             <button
               key={i}
-              onClick={function () { handleDayClick(d); }}
+              onClick={function () { setModalDay({ date: d, record: record }); }}
               style={{
                 display: "flex", flexDirection: "column", alignItems: "center", gap: 4, flex: 1,
-                background: "transparent", border: "none", padding: 0, cursor: attended ? "pointer" : "default",
+                background: "transparent", border: "none", padding: 0, cursor: "pointer",
               }}
             >
               <span style={{ color: C.silverDim, fontSize: 10.5, fontWeight: 700 }}>{WEEK_DAY_LABELS[i]}</span>
@@ -516,12 +557,12 @@ function WeeklyFrequency(props) {
         })}
       </div>
 
-      {selectedDay ? (
-        <div style={{ marginTop: 12, background: C.panel, border: "1px solid " + C.blueDim, borderRadius: 10, padding: "10px 12px" }}>
-          <p style={{ color: C.white, fontSize: 12.5, margin: 0 }}>
-            Nesse dia voce concluiu o Treino <b>{selectedDay.record.workout_tab}</b> as <b>{formatTime(selectedDay.record.created_at)}</b>
-          </p>
-        </div>
+      {modalDay ? (
+        <HistoryDayModal
+          date={modalDay.date}
+          record={modalDay.record}
+          onClose={function () { setModalDay(null); }}
+        />
       ) : null}
     </div>
   );
@@ -598,9 +639,10 @@ function FinishWorkoutModal(props) {
           <button
             onClick={props.onClearForTomorrow}
             disabled={props.clearing}
-            style={{ background: C.blue, border: "none", borderRadius: 8, color: C.white, fontSize: 13.5, fontWeight: 700, padding: "11px 0", cursor: "pointer", opacity: props.clearing ? 0.7 : 1 }}
+            style={{ background: C.blue, border: "none", borderRadius: 8, color: C.white, fontSize: 13.5, fontWeight: 700, padding: "11px 0", cursor: "pointer", opacity: props.clearing ? 0.7 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
           >
-            {props.clearing ? "Preparando..." : "Limpar para amanha"}
+            {props.clearing ? <Spinner size={14} /> : null}
+            {props.clearing ? "Limpando..." : "Limpar para amanha"}
           </button>
           <button
             onClick={props.onClose}
@@ -616,7 +658,7 @@ function FinishWorkoutModal(props) {
 
 // Painel do aluno.
 function AlunoDashboard(props) {
-  var student = props.student;
+  var student = props.student; // student.id e sempre o UUID (profiles.id == auth.uid())
   var stateTab = useState("A"); var tab = stateTab[0]; var setTab = stateTab[1];
   var stateWorkout = useState({ A: [], B: [], C: [] }); var workout = stateWorkout[0]; var setWorkout = stateWorkout[1];
   var stateLoading = useState(true); var loading = stateLoading[0]; var setLoading = stateLoading[1];
@@ -627,37 +669,45 @@ function AlunoDashboard(props) {
   var stateResetError = useState(""); var resetError = stateResetError[0]; var setResetError = stateResetError[1];
   var stateHistoryRecords = useState([]); var historyRecords = stateHistoryRecords[0]; var setHistoryRecords = stateHistoryRecords[1];
 
-  // Carrega os exercicios do aluno logado. Extraida para ser reutilizada
-  // apos o reset, garantindo que a tela sempre reflita o estado real do banco.
-  async function loadExercises() {
-    setLoading(true);
-    var result = await supabase.from("exercises").select("*").eq("student_id", student.id).order("created_at", { ascending: true });
+  // Busca os exercicios do aluno logado direto do Supabase e substitui o
+  // estado local por completo. Chamada no carregamento inicial e sempre que
+  // precisamos garantir que a tela reflete 100% o que esta no banco.
+  async function fetchExercises() {
+    var result = await supabase
+      .from("exercises")
+      .select("*")
+      .eq("student_id", student.id)
+      .order("created_at", { ascending: true });
+
     if (!result.error && result.data) {
       setWorkout(groupByTab(result.data));
     }
-    setLoading(false);
+    return result;
+  }
+
+  async function fetchHistory() {
+    var result = await supabase.from("workout_history").select("*").eq("student_id", student.id);
+    if (!result.error && result.data) {
+      setHistoryRecords(result.data);
+    }
     return result;
   }
 
   useEffect(function () {
-    console.log("[aluno] carregando painel para profiles.id (UUID):", student.id, "| nome:", student.name);
-    loadExercises();
-  }, [student.id]);
-
-  useEffect(function () {
     var cancelled = false;
-    async function loadHistory() {
-      var result = await supabase.from("workout_history").select("*").eq("student_id", student.id);
-      if (!cancelled && !result.error && result.data) {
-        setHistoryRecords(result.data);
-      }
+    async function initialLoad() {
+      setLoading(true);
+      await fetchExercises();
+      if (!cancelled) setLoading(false);
     }
-    loadHistory();
+    initialLoad();
+    fetchHistory();
     return function () { cancelled = true; };
   }, [student.id]);
 
   async function toggle(ex) {
     var newValue = !ex.is_completed;
+    // Atualizacao otimista para resposta instantanea no toque...
     setWorkout(function (prev) {
       var next = Object.assign({}, prev);
       next[tab] = next[tab].map(function (e) { return e.id === ex.id ? Object.assign({}, e, { is_completed: newValue }) : e; });
@@ -671,18 +721,8 @@ function AlunoDashboard(props) {
       .eq("student_id", student.id)
       .select();
 
-    console.log(
-      "[toggle] exercicio:", ex.id,
-      "| student_id usado:", student.id,
-      "| linhas afetadas:", result.data ? result.data.length : 0,
-      "| erro:", result.error
-    );
-
-    var failed = result.error || !result.data || result.data.length === 0;
-    if (failed) {
-      if (!result.error && (!result.data || result.data.length === 0)) {
-        console.warn("[toggle] 0 linhas afetadas — verifique a policy de UPDATE para o aluno na tabela exercises.");
-      }
+    if (result.error || !result.data || result.data.length === 0) {
+      // ...com rollback caso o update nao tenha sido aceito.
       setWorkout(function (prev) {
         var next = Object.assign({}, prev);
         next[tab] = next[tab].map(function (e) { return e.id === ex.id ? Object.assign({}, e, { is_completed: !newValue }) : e; });
@@ -707,8 +747,6 @@ function AlunoDashboard(props) {
     ]).select();
     setFinishing(false);
 
-    console.log("[finalizar treino] student_id:", student.id, "| tab:", tab, "| resultado:", result.data, "| erro:", result.error);
-
     if (!result.error) {
       if (result.data && result.data[0]) {
         setHistoryRecords(function (prev) { return prev.concat([result.data[0]]); });
@@ -718,53 +756,31 @@ function AlunoDashboard(props) {
     }
   }
 
-  // Zera is_completed do treino atual. Loga a contagem de linhas afetadas
-  // para diagnosticar se a policy de UPDATE do Supabase esta correta.
+  // Zera is_completed do treino atual daquele aluno e, em seguida,
+  // chama fetchExercises() para buscar o estado real do banco -- e a
+  // tela mostrar os quadradinhos limpos imediatamente.
   async function clearForTomorrow() {
     setClearing(true);
     setResetError("");
 
-    var result = await supabase
+    var updateResult = await supabase
       .from("exercises")
       .update({ is_completed: false })
       .eq("student_id", student.id)
       .eq("workout_tab", tab)
       .select();
 
-    var affectedRows = result.data ? result.data.length : 0;
+    if (updateResult.error) {
+      setClearing(false);
+      setResetError("Erro ao limpar: " + updateResult.error.message);
+      return;
+    }
 
-    console.log(
-      "[reset - limpar para amanha] student_id usado:", student.id,
-      "| workout_tab:", tab,
-      "| linhas afetadas:", affectedRows,
-      "| erro:", result.error
-    );
+    // Refresh direto do banco -- garante sincronia mesmo que a resposta
+    // do update nao traga as linhas (ex.: RLS retornando array vazio em alguns casos).
+    await fetchExercises();
 
     setClearing(false);
-
-    if (result.error) {
-      console.error("[reset] erro do Supabase:", result.error.message);
-      setResetError("Erro ao limpar: " + result.error.message);
-      return;
-    }
-
-    if (affectedRows === 0) {
-      console.warn("[reset] 0 LINHAS AFETADAS. Isso confirma falta de permissao (RLS) de UPDATE para o aluno na tabela exercises, ou student_id nao bate com nenhuma linha.");
-      setResetError("Nada foi atualizado (0 linhas). Provavel causa: falta a policy de UPDATE para o aluno na tabela exercises no Supabase.");
-      return;
-    }
-
-    // Atualizacao otimista imediata...
-    setWorkout(function (prev) {
-      var next = Object.assign({}, prev);
-      next[tab] = next[tab].map(function (e) { return Object.assign({}, e, { is_completed: false }); });
-      return next;
-    });
-
-    // ...e um refresh de verdade direto do banco, para garantir que a tela
-    // bata 100% com o que foi persistido no Supabase.
-    await loadExercises();
-
     setShowModal(false);
   }
 
@@ -852,7 +868,7 @@ function AlunoDashboard(props) {
               opacity: finishing ? 0.7 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
             }}
           >
-            <Flame size={16} />
+            {finishing ? <Spinner size={16} /> : <Flame size={16} />}
             {finishing ? "Salvando..." : "Finalizar Treino de Hoje"}
           </button>
         ) : null}
@@ -967,9 +983,9 @@ function RecentHistoryList(props) {
   );
 }
 
-// Painel do professor. selectedStudent.id e sempre o UUID vindo da
-// tabela profiles (identico ao auth.uid() do aluno) — usado em toda
-// query de exercises/workout_history, nunca o telefone.
+// Painel do professor. selectedStudent.id e sempre o UUID de profiles
+// (identico ao auth.uid() do aluno) -- usado em toda query de exercises
+// e workout_history, nunca o telefone.
 function ProfessorPanel(props) {
   var stateStudents = useState([]); var students = stateStudents[0]; var setStudents = stateStudents[1];
   var stateLoadingStudents = useState(true); var loadingStudents = stateLoadingStudents[0]; var setLoadingStudents = stateLoadingStudents[1];
@@ -995,8 +1011,6 @@ function ProfessorPanel(props) {
         setLoadingStudents(false);
         return;
       }
-
-      console.log("[professor] alunos carregados (id = UUID de profiles):", studentsResult.data.map(function (s) { return { id: s.id, name: s.name }; }));
 
       var historyResult = await supabase
         .from("workout_history")
@@ -1030,7 +1044,7 @@ function ProfessorPanel(props) {
       setLoadingWorkout(true);
       setLoadingHistory(true);
 
-      // selectedStudent.id e o UUID (profiles.id) - usado como student_id em ambas as tabelas.
+      // selectedStudent.id e o UUID (profiles.id) -- usado como student_id em ambas as tabelas.
       var exercisesResult = await supabase.from("exercises").select("*").eq("student_id", selectedStudent.id).order("created_at", { ascending: true });
       var historyResult = await supabase.from("workout_history").select("*").eq("student_id", selectedStudent.id).order("created_at", { ascending: false }).limit(5);
 
