@@ -15,18 +15,12 @@ import {
   Mail,
   Lock,
   User as UserIcon,
-  PartyPopper,
-  History,
   Loader2,
-  Trophy,
   Eye,
   BookOpen,
   Play,
   Lock as LockIcon,
-  CalendarCheck2,
-  CalendarPlus,
-  CalendarDays,
-  TrendingUp,
+  CheckCircle2,
 } from "lucide-react";
 import { supabase } from "./supabaseClient.js";
 
@@ -74,7 +68,6 @@ var C = {
   blueDeep: "#123a5c",
   white: "#f3f5f7",
   danger: "#c65a5a",
-  historyBlue: "#5c8aa3",
   success: "#3fae6a",
 };
 
@@ -161,8 +154,7 @@ function buildWeekDays(referenceDate) {
   return days;
 }
 
-// Grid de calendario mensal, sempre comecando na segunda-feira.
-// Gera 5 ou 6 semanas dependendo de onde o mes cai (nunca corta dias).
+// Grid de calendario mensal, sempre comecando na segunda-feira (5 ou 6 semanas).
 function buildMonthCells(baseDate) {
   var year = baseDate.getFullYear();
   var month = baseDate.getMonth();
@@ -192,8 +184,6 @@ function findHistoryForDate(records, date) {
   return null;
 }
 
-// Busca a carga anterior (mais recente antes de beforeDate) do mesmo exercicio
-// pelo nome, para deteccao de evolucao.
 function getPreviousWeight(historyRecords, exerciseName, beforeDate) {
   var candidates = historyRecords
     .filter(function (r) { return new Date(r.created_at).getTime() < beforeDate.getTime() && r.summary_data; })
@@ -596,6 +586,44 @@ function ProgressBar(props) {
   );
 }
 
+// Cabecalho de perfil clicavel: unico ponto de entrada para o Calendario
+// Mensal. Tem feedback visual de toque (leve escala + fundo).
+function PressableProfileHeader(props) {
+  var statePressed = useState(false); var pressed = statePressed[0]; var setPressed = statePressed[1];
+
+  return (
+    <button
+      onClick={props.onClick}
+      onMouseDown={function () { setPressed(true); }}
+      onMouseUp={function () { setPressed(false); }}
+      onMouseLeave={function () { setPressed(false); }}
+      onTouchStart={function () { setPressed(true); }}
+      onTouchEnd={function () { setPressed(false); }}
+      style={{
+        display: "flex", alignItems: "center", gap: 10, width: "100%",
+        background: pressed ? C.panelAlt : "transparent",
+        border: "none", borderRadius: 12, padding: "6px 8px", margin: "-6px -8px",
+        cursor: "pointer", textAlign: "left",
+        transform: pressed ? "scale(0.97)" : "scale(1)",
+        transition: "transform 0.12s ease, background 0.12s ease",
+      }}
+    >
+      <Avatar name={props.name} size={38} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <p style={{ color: C.white, fontSize: 15, fontWeight: 800, margin: 0 }}>{props.title}</p>
+          <ChevronRight size={15} color={C.silverDim} />
+        </div>
+        {props.subtitle ? (
+          <p style={{ color: C.silverDim, fontSize: 11.5, margin: 0, display: "flex", alignItems: "center", gap: 4 }}>
+            {props.subtitle}
+          </p>
+        ) : null}
+      </div>
+    </button>
+  );
+}
+
 function WeekCircleRow(props) {
   return (
     <div style={{ display: "flex", justifyContent: "space-between", gap: 6, marginBottom: 8 }}>
@@ -627,25 +655,28 @@ function WeekCircleRow(props) {
   );
 }
 
-// Resumo de um dia (usado tanto na fileira semanal quanto no calendario mensal).
-// Se withProgress, compara cada carga com a ocorrencia anterior do mesmo exercicio.
-function HistorySummaryBlock(props) {
-  if (!props.record) {
-    return (
-      <div style={{ background: C.panel, border: "1px solid " + C.border, borderRadius: 12, padding: "20px 16px", textAlign: "center" }}>
-        <p style={{ color: C.silverDim, fontSize: 13, margin: 0 }}>Nenhum treino registrado neste dia.</p>
-      </div>
-    );
-  }
+// Resumo do dia concluido: lista o que foi feito + deteccao de evolucao de carga.
+function CompletedDayView(props) {
   var record = props.record;
   var allRecords = props.allRecords || [];
   var recordDate = new Date(record.created_at);
 
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "center", gap: 12, background: C.panel, border: "1px solid " + C.historyBlue, borderRadius: 12, padding: 14, marginBottom: record.summary_data ? 10 : 0 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+        <CheckCircle2 size={18} color={C.success} />
+        <p style={{ color: C.success, fontSize: 14, fontWeight: 800, margin: 0 }}>Treino Finalizado</p>
+      </div>
+
+      {props.phrase ? (
+        <div style={{ background: C.panel, border: "1px solid " + C.border, borderRadius: 12, padding: "14px 16px", marginBottom: 14 }}>
+          <p style={{ color: C.white, fontSize: 13, fontWeight: 600, margin: 0, lineHeight: 1.5 }}>"{props.phrase}"</p>
+        </div>
+      ) : null}
+
+      <div style={{ display: "flex", alignItems: "center", gap: 12, background: C.panel, border: "1px solid " + C.blueDim, borderRadius: 12, padding: 14, marginBottom: record.summary_data ? 10 : 0 }}>
         <div style={{ width: 42, height: 42, borderRadius: "50%", background: C.blueDeep, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-          <Flame size={18} color={C.historyBlue} />
+          <Flame size={18} color={C.blue} />
         </div>
         <p style={{ color: C.white, fontSize: 13.5, margin: 0 }}>
           Treino <b>{record.workout_tab}</b> concluido as <b>{formatTime(record.created_at)}</b>
@@ -656,7 +687,7 @@ function HistorySummaryBlock(props) {
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           {record.summary_data.map(function (item, idx) {
             var showEvolution = false;
-            if (props.withProgress && item.weight) {
+            if (item.weight) {
               var currentWeight = parseFloat(String(item.weight).replace(",", "."));
               var previousWeight = getPreviousWeight(allRecords, item.name, recordDate);
               if (!isNaN(currentWeight) && previousWeight !== null && currentWeight > previousWeight) {
@@ -679,14 +710,20 @@ function HistorySummaryBlock(props) {
           })}
         </div>
       ) : null}
+
+      {props.onViewPlan ? (
+        <button
+          onClick={props.onViewPlan}
+          style={{ width: "100%", marginTop: 14, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: "transparent", border: "1px solid " + C.border, borderRadius: 8, color: C.silverDim, fontSize: 12.5, fontWeight: 600, padding: "9px 0", cursor: "pointer" }}
+        >
+          <Eye size={14} /> Ver plano de hoje novamente
+        </button>
+      ) : null}
     </div>
   );
 }
 
-// Tela de Historico Mensal: grid de calendario do mes, dias com treino
-// destacados, clique abre o resumo com deteccao de evolucao de carga.
-// Usada tanto pelo Aluno (proprio historico) quanto pelo Professor
-// (historico de qualquer aluno selecionado).
+// Tela de Historico Mensal: aberta APENAS pelo clique no Perfil (Nome/Avatar).
 function MonthlyHistoryScreen(props) {
   var stateMonth = useState(function () { var d = new Date(); d.setDate(1); return d; });
   var monthDate = stateMonth[0]; var setMonthDate = stateMonth[1];
@@ -747,15 +784,16 @@ function MonthlyHistoryScreen(props) {
                 var hasRecord = !!findHistoryForDate(props.historyRecords, d);
                 var isToday = isSameDate(d, today);
                 var isSelected = selectedDay && isSameDate(d, selectedDay);
+                var bgColor = hasRecord ? C.success : (isToday ? C.blue : C.panelAlt);
                 return (
                   <button
                     key={di}
                     onClick={function () { setSelectedDay(d); }}
                     style={{
                       aspectRatio: "1", borderRadius: 8,
-                      background: hasRecord ? C.blue : C.panelAlt,
-                      border: "2px solid " + (isSelected ? C.white : (isToday ? C.blue : C.border)),
-                      color: inMonth ? (hasRecord ? C.white : C.silverDim) : "#4a5563",
+                      background: bgColor,
+                      border: "2px solid " + (isSelected ? C.white : C.border),
+                      color: inMonth ? ((hasRecord || isToday) ? C.white : C.silverDim) : "#4a5563",
                       fontSize: 11.5, fontWeight: 700,
                       display: "flex", alignItems: "center", justifyContent: "center",
                       cursor: "pointer", opacity: inMonth ? 1 : 0.45,
@@ -771,10 +809,19 @@ function MonthlyHistoryScreen(props) {
       </div>
 
       {selectedDay ? (
-        <div>
-          <p style={{ color: C.silverDim, fontSize: 12, margin: "0 0 10px" }}>{formatFriendlyDate(selectedDay)}</p>
-          <HistorySummaryBlock record={selectedRecord} allRecords={props.historyRecords} withProgress />
-        </div>
+        selectedRecord ? (
+          <div>
+            <p style={{ color: C.silverDim, fontSize: 12, margin: "0 0 10px" }}>{formatFriendlyDate(selectedDay)}</p>
+            <CompletedDayView record={selectedRecord} allRecords={props.historyRecords} />
+          </div>
+        ) : (
+          <div>
+            <p style={{ color: C.silverDim, fontSize: 12, margin: "0 0 10px" }}>{formatFriendlyDate(selectedDay)}</p>
+            <div style={{ background: C.panel, border: "1px solid " + C.border, borderRadius: 12, padding: "20px 16px", textAlign: "center" }}>
+              <p style={{ color: C.silverDim, fontSize: 13, margin: 0 }}>Nenhum treino registrado neste dia.</p>
+            </div>
+          </div>
+        )
       ) : (
         <p style={{ color: C.silverDim, fontSize: 12.5, textAlign: "center", padding: "10px 0" }}>Toque em um dia para ver o resumo do treino.</p>
       )}
@@ -891,46 +938,8 @@ function LockedExerciseCard(props) {
   );
 }
 
-function MissionAccomplishedScreen(props) {
-  return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", paddingTop: 30, paddingBottom: 20 }}>
-      <div
-        style={{
-          width: 84, height: 84, borderRadius: "50%",
-          background: "radial-gradient(circle at 30% 30%, " + C.blueDim + ", " + C.blueDeep + ")",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          marginBottom: 20, border: "1px solid " + C.border,
-          boxShadow: "0 0 0 6px rgba(47,134,198,0.08)",
-        }}
-      >
-        <Trophy size={38} color={C.white} />
-      </div>
-
-      <p style={{ color: C.white, fontSize: 19, fontWeight: 800, margin: "0 0 6px", textTransform: "uppercase", letterSpacing: 0.5 }}>
-        Missao Cumprida
-      </p>
-      <p style={{ color: C.blue, fontSize: 13, fontWeight: 700, margin: "0 0 18px" }}>
-        Treino {props.lastTab} concluido hoje as {props.lastTime}
-      </p>
-
-      <div style={{ background: C.panel, border: "1px solid " + C.border, borderRadius: 14, padding: "18px 20px", maxWidth: 320, marginBottom: 26 }}>
-        <p style={{ color: C.white, fontSize: 14.5, fontWeight: 600, margin: 0, lineHeight: 1.5 }}>
-          "{props.phrase}"
-        </p>
-      </div>
-
-      <button
-        onClick={props.onViewExercises}
-        style={{ display: "flex", alignItems: "center", gap: 6, background: "transparent", border: "1px solid " + C.border, borderRadius: 8, color: C.silverDim, fontSize: 12.5, fontWeight: 600, padding: "9px 16px", cursor: "pointer" }}
-      >
-        <Eye size={14} /> Ver exercicios novamente
-      </button>
-    </div>
-  );
-}
-
-// Painel do aluno. Tela principal so mostra a fileira semanal + botao para
-// abrir o Historico Completo (calendario mensal) em tela separada.
+// Painel do aluno. Pagina inicial = fileira de 7 bolinhas + area de conteudo
+// do dia selecionado. Unico jeito de abrir o mes inteiro e clicando no perfil.
 function AlunoDashboard(props) {
   var student = props.student;
   var weekDays = buildWeekDays(new Date());
@@ -997,11 +1006,8 @@ function AlunoDashboard(props) {
   }
 
   var isToday = isSameDate(selectedDate, today);
-  var isPast = stripTime(selectedDate).getTime() < stripTime(today).getTime();
   var selectedDayKey = getDayKeyForDate(selectedDate);
-
   var plannedList = allExercises.filter(function (e) { return e.scheduled_day === selectedDayKey; });
-
   var historyForSelectedDate = findHistoryForDate(historyRecords, selectedDate);
 
   var startedAtIsToday = startedAt ? isSameDate(new Date(startedAt), today) : false;
@@ -1061,6 +1067,9 @@ function AlunoDashboard(props) {
     }
   }
 
+  // Deduplicacao reforcada: upsert por (student_id, workout_date), com
+  // indice unico no banco. Mesmo clicando varias vezes em "Finalizar", o
+  // Supabase so atualiza a UNICA linha de hoje -- nunca cria repetidas.
   async function finishWorkout() {
     if (finishing) return;
     setFinishing(true);
@@ -1120,50 +1129,51 @@ function AlunoDashboard(props) {
   var doneCount = 0;
   for (var j = 0; j < plannedList.length; j++) { if (plannedList[j].is_completed) doneCount++; }
 
+  // Cores de status: verde = ja concluido; azul = hoje ainda nao concluido;
+  // cinza escuro (padrao) = dias futuros ou passados sem treino.
   var weekCircleItems = weekDays.map(function (d, i) {
     var hasHist = !!findHistoryForDate(historyRecords, d);
+    var dIsToday = isSameDate(d, today);
+    var highlighted = hasHist || dIsToday;
+    var color = hasHist ? C.success : C.blue;
     return {
       key: DAY_TABS[i].key,
       topLabel: DAY_TABS[i].label,
       circleText: d.getDate(),
-      highlighted: hasHist,
+      highlighted: highlighted,
+      highlightColor: color,
       ringActive: isSameDate(d, selectedDate),
       onClick: function () { selectDate(d); },
     };
   });
 
-  var showMissionScreen = isToday && historyForSelectedDate && !forceView && !loading;
+  var showCompletedView = historyForSelectedDate && !forceView && !loading;
 
   return (
     <PageContainer>
       <TopBrandBar />
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <Avatar name={student.name} size={38} />
-          <div>
-            <p style={{ color: C.white, fontSize: 15, fontWeight: 800, margin: 0 }}>Treino de {student.name.split(" ")[0]}</p>
-            <p style={{ color: C.silverDim, fontSize: 11.5, margin: 0, display: "flex", alignItems: "center", gap: 4 }}>
-              <Phone size={11} /> {student.phone}
-            </p>
-          </div>
-        </div>
-        <button onClick={props.onExit} aria-label="Sair" style={{ width: 34, height: 34, borderRadius: 8, border: "1px solid " + C.border, background: C.panel, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+
+      <PressableProfileHeader
+        name={student.name}
+        title={"Treino de " + student.name.split(" ")[0]}
+        subtitle={
+          <React.Fragment>
+            <Phone size={11} /> {student.phone}
+          </React.Fragment>
+        }
+        onClick={function () { setShowMonthly(true); }}
+      />
+
+      <div style={{ display: "flex", justifyContent: "flex-end" }}>
+        <button onClick={props.onExit} aria-label="Sair" style={{ marginTop: -34, width: 34, height: 34, borderRadius: 8, border: "1px solid " + C.border, background: C.panel, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
           <LogOut size={16} color={C.silverDim} />
         </button>
       </div>
 
       <div style={{ paddingTop: 20, marginBottom: 6 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-          <p style={{ color: C.silverDim, fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, margin: 0 }}>
-            Minha Semana
-          </p>
-          <button
-            onClick={function () { setShowMonthly(true); }}
-            style={{ display: "flex", alignItems: "center", gap: 5, background: "transparent", border: "none", color: C.blue, fontSize: 11.5, fontWeight: 700, cursor: "pointer", padding: 0 }}
-          >
-            <CalendarDays size={13} /> Ver Historico Completo
-          </button>
-        </div>
+        <p style={{ color: C.silverDim, fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10 }}>
+          Minha Semana
+        </p>
         <WeekCircleRow items={weekCircleItems} />
       </div>
 
@@ -1173,15 +1183,13 @@ function AlunoDashboard(props) {
 
       {loading ? (
         <p style={{ color: C.silverDim, fontSize: 13, textAlign: "center", padding: "20px 0" }}>Carregando...</p>
-      ) : showMissionScreen ? (
-        <MissionAccomplishedScreen
-          phrase={phrase}
-          lastTab={historyForSelectedDate.workout_tab}
-          lastTime={formatTime(historyForSelectedDate.created_at)}
-          onViewExercises={function () { setForceView(true); }}
+      ) : showCompletedView ? (
+        <CompletedDayView
+          record={historyForSelectedDate}
+          allRecords={historyRecords}
+          phrase={isToday ? phrase : null}
+          onViewPlan={isToday ? function () { setForceView(true); } : null}
         />
-      ) : isPast ? (
-        <HistorySummaryBlock record={historyForSelectedDate} allRecords={historyRecords} withProgress />
       ) : (
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
@@ -1247,7 +1255,7 @@ function AlunoDashboard(props) {
               onClick={function () { setForceView(false); }}
               style={{ width: "100%", marginTop: 10, background: "transparent", border: "1px solid " + C.border, borderRadius: 8, color: C.silverDim, fontSize: 12.5, fontWeight: 600, padding: "9px 0", cursor: "pointer" }}
             >
-              Voltar para Missao Cumprida
+              Voltar para Treino Finalizado
             </button>
           ) : null}
         </div>
@@ -1351,7 +1359,6 @@ function RecentHistoryList(props) {
   return (
     <div style={{ marginBottom: 18 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
-        <History size={14} color={C.historyBlue} />
         <p style={{ color: C.silverDim, fontSize: 11.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, margin: 0 }}>Ultimos Treinos Concluidos</p>
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -1459,23 +1466,8 @@ function LibraryManager(props) {
   );
 }
 
-function CalendarLegend() {
-  return (
-    <div style={{ display: "flex", gap: 16, marginBottom: 14 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-        <div style={{ width: 12, height: 12, borderRadius: "50%", background: C.historyBlue }} />
-        <span style={{ color: C.silverDim, fontSize: 11 }}>Historico (passado)</span>
-      </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-        <div style={{ width: 12, height: 12, borderRadius: "50%", background: C.blue }} />
-        <span style={{ color: C.silverDim, fontSize: 11 }}>Planejamento (hoje/futuro)</span>
-      </div>
-    </div>
-  );
-}
-
-// Painel do professor: calendario semanal identico ao do aluno, com botao
-// para abrir o Calendario Mensal completo do aluno selecionado.
+// Painel do professor. Ao selecionar um aluno, a pagina inicial mostra so
+// a fileira semanal + o mesmo cabecalho de perfil clicavel (abre o mes).
 function ProfessorPanel(props) {
   var stateMode = useState("students"); var mode = stateMode[0]; var setMode = stateMode[1];
   var stateStudents = useState([]); var students = stateStudents[0]; var setStudents = stateStudents[1];
@@ -1597,24 +1589,17 @@ function ProfessorPanel(props) {
     );
   }
 
-  var isPastSelected = stripTime(selectedDate).getTime() < stripTime(today).getTime();
   var selectedDayKey = getDayKeyForDate(selectedDate);
   var byDay = groupByDay(allExercises);
   var list = byDay[selectedDayKey];
   var historyForSelectedDate = findHistoryForDate(historyRecords, selectedDate);
+  var isCompletedDay = !!historyForSelectedDate;
 
   var weekCircleItems = weekDays.map(function (d, i) {
-    var isPastDay = stripTime(d).getTime() < stripTime(today).getTime();
-    var dayKey = getDayKeyForDate(d);
-    var highlighted, color;
-    if (isPastDay) {
-      highlighted = !!findHistoryForDate(historyRecords, d);
-      color = C.historyBlue;
-    } else {
-      var count = byDay[dayKey] ? byDay[dayKey].length : 0;
-      highlighted = count > 0;
-      color = C.blue;
-    }
+    var hasHist = !!findHistoryForDate(historyRecords, d);
+    var dIsToday = isSameDate(d, today);
+    var highlighted = hasHist || dIsToday;
+    var color = hasHist ? C.success : C.blue;
     return {
       key: DAY_TABS[i].key,
       topLabel: DAY_TABS[i].label,
@@ -1681,7 +1666,8 @@ function ProfessorPanel(props) {
   return (
     <PageContainer>
       <TopBrandBar />
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
         <button onClick={function () { setSelectedStudent(null); }} style={{ display: "flex", alignItems: "center", gap: 6, background: "transparent", border: "none", color: C.silverDim, fontSize: 12.5, cursor: "pointer" }}>
           <ArrowLeft size={14} /> Trocar aluno
         </button>
@@ -1690,49 +1676,33 @@ function ProfessorPanel(props) {
         </button>
       </div>
 
-      <div style={{ paddingTop: 12, display: "flex", alignItems: "center", gap: 10 }}>
-        <Avatar name={selectedStudent.name} size={38} />
-        <div>
-          <p style={{ color: C.white, fontSize: 15, fontWeight: 800, margin: 0 }}>{selectedStudent.name.split(" ")[0]}</p>
-          <p style={{ color: C.silverDim, fontSize: 11.5, margin: 0 }}>Painel do professor - {selectedStudent.phone}</p>
-        </div>
+      <PressableProfileHeader
+        name={selectedStudent.name}
+        title={selectedStudent.name.split(" ")[0]}
+        subtitle={"Painel do professor - " + selectedStudent.phone}
+        onClick={function () { setShowMonthly(true); }}
+      />
+
+      <div style={{ paddingTop: 18 }}>
+        <RecentHistoryList records={historyRecords} loading={loadingHistory} />
       </div>
 
-      <RecentHistoryList records={historyRecords} loading={loadingHistory} />
-
-      <div style={{ paddingTop: 4, marginBottom: 6 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-          <p style={{ color: C.silverDim, fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, margin: 0 }}>
-            Semana do Aluno
-          </p>
-          <button
-            onClick={function () { setShowMonthly(true); }}
-            style={{ display: "flex", alignItems: "center", gap: 5, background: "transparent", border: "none", color: C.blue, fontSize: 11.5, fontWeight: 700, cursor: "pointer", padding: 0 }}
-          >
-            <TrendingUp size={13} /> Calendario Mensal
-          </button>
-        </div>
+      <div style={{ marginBottom: 6 }}>
+        <p style={{ color: C.silverDim, fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10 }}>
+          Semana do Aluno
+        </p>
         <WeekCircleRow items={weekCircleItems} />
       </div>
 
-      <CalendarLegend />
-
-      <p style={{ color: C.silverDim, fontSize: 12, margin: "0 0 14px" }}>
+      <p style={{ color: C.silverDim, fontSize: 12, margin: "10px 0 14px" }}>
         {formatFriendlyDate(selectedDate)}
       </p>
 
-      {isPastSelected ? (
-        <div>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
-            <CalendarCheck2 size={15} color={C.historyBlue} />
-            <p style={{ color: C.historyBlue, fontSize: 12.5, fontWeight: 700, margin: 0, textTransform: "uppercase", letterSpacing: 0.5 }}>Historico</p>
-          </div>
-          <HistorySummaryBlock record={historyForSelectedDate} allRecords={historyRecords} withProgress />
-        </div>
+      {isCompletedDay ? (
+        <CompletedDayView record={historyForSelectedDate} allRecords={historyRecords} />
       ) : (
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
-            <CalendarPlus size={15} color={C.blue} />
             <p style={{ color: C.blue, fontSize: 12.5, fontWeight: 700, margin: 0, textTransform: "uppercase", letterSpacing: 0.5 }}>
               Planejamento - {DAY_FULL_LABEL[selectedDayKey]}
             </p>
@@ -1785,7 +1755,7 @@ function ProfessorPanel(props) {
   );
 }
 
-export default function App() {
+function App() {
   var stateScreen = useState("loading"); var screen = stateScreen[0]; var setScreen = stateScreen[1];
   var stateRole = useState(null); var currentRole = stateRole[0]; var setCurrentRole = stateRole[1];
   var stateProfile = useState(null); var currentProfile = stateProfile[0]; var setCurrentProfile = stateProfile[1];
@@ -1851,4 +1821,5 @@ export default function App() {
     </div>
   );
 }
+
 export default App;
