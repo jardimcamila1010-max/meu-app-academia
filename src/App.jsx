@@ -21,6 +21,7 @@ import {
   Play,
   Lock as LockIcon,
   CheckCircle2,
+  Coffee,
 } from "lucide-react";
 import { supabase } from "./supabaseClient.js";
 
@@ -228,6 +229,14 @@ function formatTime(input) {
 function pickRandomPhrase() {
   var i = Math.floor(Math.random() * INCENTIVE_PHRASES.length);
   return INCENTIVE_PHRASES[i];
+}
+
+// Titulo dinamico da secao de exercicios, conforme a "consciencia temporal"
+// do dia selecionado em relacao a hoje.
+function getSectionTitle(isPast, isToday, dayKey) {
+  if (isPast) return "Relatorio do Dia";
+  if (isToday) return "Treino de Hoje";
+  return "Planejamento de " + DAY_FULL_LABEL[dayKey];
 }
 
 function Spinner(props) {
@@ -586,8 +595,6 @@ function ProgressBar(props) {
   );
 }
 
-// Cabecalho de perfil clicavel: unico ponto de entrada para o Calendario
-// Mensal. Tem feedback visual de toque (leve escala + fundo).
 function PressableProfileHeader(props) {
   var statePressed = useState(false); var pressed = statePressed[0]; var setPressed = statePressed[1];
 
@@ -655,7 +662,6 @@ function WeekCircleRow(props) {
   );
 }
 
-// Resumo do dia concluido: lista o que foi feito + deteccao de evolucao de carga.
 function CompletedDayView(props) {
   var record = props.record;
   var allRecords = props.allRecords || [];
@@ -723,7 +729,18 @@ function CompletedDayView(props) {
   );
 }
 
-// Tela de Historico Mensal: aberta APENAS pelo clique no Perfil (Nome/Avatar).
+// Mensagem exibida quando um dia PASSADO nao tem historico de treino nenhum.
+function RestOrNoRecordMessage() {
+  return (
+    <div style={{ background: C.panel, border: "1px solid " + C.border, borderRadius: 12, padding: "22px 16px", textAlign: "center" }}>
+      <Coffee size={22} color={C.silverDim} style={{ marginBottom: 8 }} />
+      <p style={{ color: C.silverDim, fontSize: 13, margin: 0 }}>
+        ☕ Dia de descanso ou sem registro de atividade.
+      </p>
+    </div>
+  );
+}
+
 function MonthlyHistoryScreen(props) {
   var stateMonth = useState(function () { var d = new Date(); d.setDate(1); return d; });
   var monthDate = stateMonth[0]; var setMonthDate = stateMonth[1];
@@ -817,9 +834,7 @@ function MonthlyHistoryScreen(props) {
         ) : (
           <div>
             <p style={{ color: C.silverDim, fontSize: 12, margin: "0 0 10px" }}>{formatFriendlyDate(selectedDay)}</p>
-            <div style={{ background: C.panel, border: "1px solid " + C.border, borderRadius: 12, padding: "20px 16px", textAlign: "center" }}>
-              <p style={{ color: C.silverDim, fontSize: 13, margin: 0 }}>Nenhum treino registrado neste dia.</p>
-            </div>
+            <RestOrNoRecordMessage />
           </div>
         )
       ) : (
@@ -938,8 +953,7 @@ function LockedExerciseCard(props) {
   );
 }
 
-// Painel do aluno. Pagina inicial = fileira de 7 bolinhas + area de conteudo
-// do dia selecionado. Unico jeito de abrir o mes inteiro e clicando no perfil.
+// Painel do aluno.
 function AlunoDashboard(props) {
   var student = props.student;
   var weekDays = buildWeekDays(new Date());
@@ -1006,6 +1020,7 @@ function AlunoDashboard(props) {
   }
 
   var isToday = isSameDate(selectedDate, today);
+  var isPast = stripTime(selectedDate).getTime() < stripTime(today).getTime();
   var selectedDayKey = getDayKeyForDate(selectedDate);
   var plannedList = allExercises.filter(function (e) { return e.scheduled_day === selectedDayKey; });
   var historyForSelectedDate = findHistoryForDate(historyRecords, selectedDate);
@@ -1067,9 +1082,8 @@ function AlunoDashboard(props) {
     }
   }
 
-  // Deduplicacao reforcada: upsert por (student_id, workout_date), com
-  // indice unico no banco. Mesmo clicando varias vezes em "Finalizar", o
-  // Supabase so atualiza a UNICA linha de hoje -- nunca cria repetidas.
+  // Deduplicacao: upsert por (student_id, workout_date), com indice unico
+  // no banco. Mesmo clicando varias vezes em "Finalizar", so ha 1 linha/dia.
   async function finishWorkout() {
     if (finishing) return;
     setFinishing(true);
@@ -1129,8 +1143,6 @@ function AlunoDashboard(props) {
   var doneCount = 0;
   for (var j = 0; j < plannedList.length; j++) { if (plannedList[j].is_completed) doneCount++; }
 
-  // Cores de status: verde = ja concluido; azul = hoje ainda nao concluido;
-  // cinza escuro (padrao) = dias futuros ou passados sem treino.
   var weekCircleItems = weekDays.map(function (d, i) {
     var hasHist = !!findHistoryForDate(historyRecords, d);
     var dIsToday = isSameDate(d, today);
@@ -1148,6 +1160,7 @@ function AlunoDashboard(props) {
   });
 
   var showCompletedView = historyForSelectedDate && !forceView && !loading;
+  var sectionTitle = getSectionTitle(isPast, isToday, selectedDayKey);
 
   return (
     <PageContainer>
@@ -1195,34 +1208,39 @@ function AlunoDashboard(props) {
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
             <Flame size={16} color={C.blue} />
             <h2 style={{ color: C.white, fontSize: 16, fontWeight: 800, margin: 0 }}>
-              {isToday ? "Treino de Hoje" : "Treino planejado - " + DAY_FULL_LABEL[selectedDayKey]}
+              {sectionTitle}
             </h2>
           </div>
 
           {isInteractive ? <ProgressBar done={doneCount} total={plannedList.length} /> : null}
 
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {plannedList.length === 0 ? (
+          {plannedList.length === 0 ? (
+            isPast ? (
+              <RestOrNoRecordMessage />
+            ) : (
               <p style={{ color: C.silverDim, fontSize: 13, textAlign: "center", padding: "20px 0" }}>
                 Nenhum exercicio planejado para este dia.
               </p>
-            ) : null}
-            {plannedList.map(function (ex) {
-              if (isInteractive) {
-                return (
-                  <ExerciseCard
-                    key={ex.id}
-                    ex={ex}
-                    weight={weights[student.id + "-" + selectedDayKey + "-" + ex.id]}
-                    onToggle={toggle}
-                    onWeightChange={setWeight}
-                    onOpenDetail={setDetailEx}
-                  />
-                );
-              }
-              return <LockedExerciseCard key={ex.id} ex={ex} onOpenDetail={setDetailEx} />;
-            })}
-          </div>
+            )
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {plannedList.map(function (ex) {
+                if (isInteractive) {
+                  return (
+                    <ExerciseCard
+                      key={ex.id}
+                      ex={ex}
+                      weight={weights[student.id + "-" + selectedDayKey + "-" + ex.id]}
+                      onToggle={toggle}
+                      onWeightChange={setWeight}
+                      onOpenDetail={setDetailEx}
+                    />
+                  );
+                }
+                return <LockedExerciseCard key={ex.id} ex={ex} onOpenDetail={setDetailEx} />;
+              })}
+            </div>
+          )}
 
           {finishError ? (
             <p style={{ color: C.danger, fontSize: 12.5, marginTop: 10, textAlign: "center" }}>{finishError}</p>
@@ -1466,8 +1484,9 @@ function LibraryManager(props) {
   );
 }
 
-// Painel do professor. Ao selecionar um aluno, a pagina inicial mostra so
-// a fileira semanal + o mesmo cabecalho de perfil clicavel (abre o mes).
+// Painel do professor: dia PASSADO -> so historico/mensagem, SEM formulario
+// de planejamento (nao se edita o passado). Dia de HOJE ou FUTURO -> mostra
+// (e permite editar) o planejamento normalmente.
 function ProfessorPanel(props) {
   var stateMode = useState("students"); var mode = stateMode[0]; var setMode = stateMode[1];
   var stateStudents = useState([]); var students = stateStudents[0]; var setStudents = stateStudents[1];
@@ -1589,11 +1608,16 @@ function ProfessorPanel(props) {
     );
   }
 
+  var isPastSelected = stripTime(selectedDate).getTime() < stripTime(today).getTime();
+  var isTodaySelected = isSameDate(selectedDate, today);
   var selectedDayKey = getDayKeyForDate(selectedDate);
   var byDay = groupByDay(allExercises);
   var list = byDay[selectedDayKey];
   var historyForSelectedDate = findHistoryForDate(historyRecords, selectedDate);
   var isCompletedDay = !!historyForSelectedDate;
+  // Trava de edicao: o formulario de planejamento so aparece para hoje/futuro.
+  var canPlan = !isPastSelected;
+  var sectionTitle = getSectionTitle(isPastSelected, isTodaySelected, selectedDayKey);
 
   var weekCircleItems = weekDays.map(function (d, i) {
     var hasHist = !!findHistoryForDate(historyRecords, d);
@@ -1698,16 +1722,18 @@ function ProfessorPanel(props) {
         {formatFriendlyDate(selectedDate)}
       </p>
 
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
+        <p style={{ color: isPastSelected ? C.success : C.blue, fontSize: 12.5, fontWeight: 700, margin: 0, textTransform: "uppercase", letterSpacing: 0.5 }}>
+          {sectionTitle}
+        </p>
+      </div>
+
       {isCompletedDay ? (
         <CompletedDayView record={historyForSelectedDate} allRecords={historyRecords} />
+      ) : isPastSelected ? (
+        <RestOrNoRecordMessage />
       ) : (
         <div>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
-            <p style={{ color: C.blue, fontSize: 12.5, fontWeight: 700, margin: 0, textTransform: "uppercase", letterSpacing: 0.5 }}>
-              Planejamento - {DAY_FULL_LABEL[selectedDayKey]}
-            </p>
-          </div>
-
           {loadingWorkout ? (
             <p style={{ color: C.silverDim, fontSize: 13, textAlign: "center", padding: "12px 0" }}>Carregando exercicios...</p>
           ) : (
@@ -1723,32 +1749,34 @@ function ProfessorPanel(props) {
             </div>
           )}
 
-          <div style={{ background: C.panelAlt, border: "1px solid " + C.border, borderRadius: 12, padding: 12 }}>
-            <p style={{ color: C.silverDim, fontSize: 11.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, margin: "0 0 8px" }}>
-              Adicionar exercicio para {DAY_FULL_LABEL[selectedDayKey]}
-            </p>
+          {canPlan ? (
+            <div style={{ background: C.panelAlt, border: "1px solid " + C.border, borderRadius: 12, padding: 12 }}>
+              <p style={{ color: C.silverDim, fontSize: 11.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, margin: "0 0 8px" }}>
+                Adicionar exercicio para {DAY_FULL_LABEL[selectedDayKey]}
+              </p>
 
-            <select value={librarySelectId} onChange={function (e) { handleLibrarySelect(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })}>
-              <option value="">Selecionar da Biblioteca (opcional)</option>
-              {library.map(function (it) { return <option key={it.id} value={it.id}>{it.name}</option>; })}
-            </select>
-
-            <input type="text" placeholder="Nome do exercicio" value={newName} onChange={function (e) { setNewName(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })} />
-            <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-              <input type="number" placeholder="Series" value={newSets} onChange={function (e) { setNewSets(e.target.value); }} style={Object.assign({}, plainInputStyle, { width: 70 })} />
-              <input type="text" placeholder="Repeticoes (ex: 10-12)" value={newReps} onChange={function (e) { setNewReps(e.target.value); }} style={Object.assign({}, plainInputStyle, { flex: 1 })} />
-              <select value={newWorkoutTab} onChange={function (e) { setNewWorkoutTab(e.target.value); }} style={Object.assign({}, plainInputStyle, { width: 60, padding: "10px 4px" })}>
-                {TABS.map(function (t) { return <option key={t} value={t}>{t}</option>; })}
+              <select value={librarySelectId} onChange={function (e) { handleLibrarySelect(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })}>
+                <option value="">Selecionar da Biblioteca (opcional)</option>
+                {library.map(function (it) { return <option key={it.id} value={it.id}>{it.name}</option>; })}
               </select>
-            </div>
-            <input type="text" placeholder="URL da foto 1" value={newImage} onChange={function (e) { setNewImage(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })} />
-            <input type="text" placeholder="URL da foto 2 (opcional)" value={newImage2} onChange={function (e) { setNewImage2(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })} />
-            <textarea placeholder="Observacoes Tecnicas" value={newNotes} onChange={function (e) { setNewNotes(e.target.value); }} style={Object.assign({}, textareaStyle, { marginBottom: 10 })} />
 
-            <button onClick={addExercise} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: C.blue, border: "none", borderRadius: 8, color: C.white, fontSize: 13, fontWeight: 700, padding: "10px 0", cursor: "pointer" }}>
-              <Plus size={15} /> Adicionar a {DAY_FULL_LABEL[selectedDayKey]}
-            </button>
-          </div>
+              <input type="text" placeholder="Nome do exercicio" value={newName} onChange={function (e) { setNewName(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })} />
+              <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                <input type="number" placeholder="Series" value={newSets} onChange={function (e) { setNewSets(e.target.value); }} style={Object.assign({}, plainInputStyle, { width: 70 })} />
+                <input type="text" placeholder="Repeticoes (ex: 10-12)" value={newReps} onChange={function (e) { setNewReps(e.target.value); }} style={Object.assign({}, plainInputStyle, { flex: 1 })} />
+                <select value={newWorkoutTab} onChange={function (e) { setNewWorkoutTab(e.target.value); }} style={Object.assign({}, plainInputStyle, { width: 60, padding: "10px 4px" })}>
+                  {TABS.map(function (t) { return <option key={t} value={t}>{t}</option>; })}
+                </select>
+              </div>
+              <input type="text" placeholder="URL da foto 1" value={newImage} onChange={function (e) { setNewImage(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })} />
+              <input type="text" placeholder="URL da foto 2 (opcional)" value={newImage2} onChange={function (e) { setNewImage2(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })} />
+              <textarea placeholder="Observacoes Tecnicas" value={newNotes} onChange={function (e) { setNewNotes(e.target.value); }} style={Object.assign({}, textareaStyle, { marginBottom: 10 })} />
+
+              <button onClick={addExercise} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: C.blue, border: "none", borderRadius: 8, color: C.white, fontSize: 13, fontWeight: 700, padding: "10px 0", cursor: "pointer" }}>
+                <Plus size={15} /> Adicionar a {DAY_FULL_LABEL[selectedDayKey]}
+              </button>
+            </div>
+          ) : null}
         </div>
       )}
     </PageContainer>
