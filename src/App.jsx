@@ -7,6 +7,8 @@ import {
   Flame,
   Plus,
   Trash2,
+  Pencil,
+  X,
   ArrowLeft,
   Phone,
   Mail,
@@ -122,16 +124,56 @@ function Logo(props) {
 
 function TopBrandBar() {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px 18px 0" }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 8, paddingBottom: 10 }}>
       <img src={LOGO_URL} alt="Phisic Form" style={{ width: 24, height: 24, borderRadius: 6, objectFit: "cover", border: "1px solid " + C.border }} />
       <span style={{ color: C.silverDim, fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase" }}>Phisic Form</span>
     </div>
   );
 }
 
+// Shell centralizado: usado nas telas de boas-vindas, login, cadastro e selecao de aluno.
+// min-height: 100vh + padding-top com safe-area para nao ficar atras do notch,
+// e justifyContent: center para o conteudo nao grudar no topo em telas altas.
 function Shell(props) {
   return (
-    <div style={{ minHeight: 600, background: C.bg, display: "flex", flexDirection: "column", alignItems: "center", padding: "40px 20px", fontFamily: "system-ui, sans-serif" }}>
+    <div
+      style={{
+        minHeight: "100vh",
+        width: "100%",
+        boxSizing: "border-box",
+        background: C.bg,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "24px 20px",
+        paddingTop: "max(24px, env(safe-area-inset-top))",
+        paddingBottom: "max(24px, env(safe-area-inset-bottom))",
+        fontFamily: "system-ui, sans-serif",
+      }}
+    >
+      {props.children}
+    </div>
+  );
+}
+
+// Container das telas internas (Aluno/Professor): ocupa a tela toda,
+// respeita a safe-area no topo, mas fica alinhado ao topo (nao centralizado)
+// porque tem lista de conteudo que deve rolar normalmente.
+function PageContainer(props) {
+  return (
+    <div
+      style={{
+        minHeight: "100vh",
+        width: "100%",
+        boxSizing: "border-box",
+        background: C.bg,
+        fontFamily: "system-ui, sans-serif",
+        padding: "0 18px 30px",
+        paddingTop: "max(18px, env(safe-area-inset-top))",
+        paddingBottom: "max(30px, env(safe-area-inset-bottom))",
+      }}
+    >
       {props.children}
     </div>
   );
@@ -277,10 +319,8 @@ function SignupScreen(props) {
     }
 
     if (signUpResult.data.session) {
-      // Login automatico ja aconteceu (confirmacao de e-mail desativada no projeto)
       props.onSignupSuccess({ id: userId, name: name.trim(), phone: phone.trim(), role: "aluno" });
     } else {
-      // Projeto exige confirmacao de e-mail antes do primeiro login
       setInfo("Conta criada! Confirme seu e-mail e depois faca login.");
     }
   }
@@ -438,9 +478,9 @@ function AlunoDashboard(props) {
   }
 
   return (
-    <div style={{ minHeight: 600, background: C.bg, fontFamily: "system-ui, sans-serif", paddingBottom: 30 }}>
+    <PageContainer>
       <TopBrandBar />
-      <div style={{ padding: "12px 18px 0", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <Avatar name={student.name} size={38} />
           <div>
@@ -455,7 +495,7 @@ function AlunoDashboard(props) {
         </button>
       </div>
 
-      <div style={{ padding: "18px 18px 0", display: "flex", gap: 8 }}>
+      <div style={{ paddingTop: 18, display: "flex", gap: 8 }}>
         {TABS.map(function (k) {
           var active = k === tab;
           return (
@@ -466,7 +506,7 @@ function AlunoDashboard(props) {
         })}
       </div>
 
-      <div style={{ padding: "16px 18px 0" }}>
+      <div style={{ paddingTop: 16 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
           <Flame size={16} color={C.blue} />
           <h2 style={{ color: C.white, fontSize: 16, fontWeight: 800, margin: 0 }}>Treino {tab}</h2>
@@ -504,12 +544,80 @@ function AlunoDashboard(props) {
           </div>
         ) : null}
       </div>
+    </PageContainer>
+  );
+}
+
+// Linha de exercicio no painel do professor, com modo de edicao inline.
+function ProfessorExerciseRow(props) {
+  var ex = props.ex;
+  var stateEditing = useState(false); var editing = stateEditing[0]; var setEditing = stateEditing[1];
+  var stateName = useState(ex.name); var name = stateName[0]; var setName = stateName[1];
+  var stateSets = useState(String(ex.sets)); var sets = stateSets[0]; var setSets = stateSets[1];
+  var stateReps = useState(ex.reps); var reps = stateReps[0]; var setReps = stateReps[1];
+  var stateImage = useState(ex.image || ""); var image = stateImage[0]; var setImage = stateImage[1];
+
+  function cancelEdit() {
+    setName(ex.name);
+    setSets(String(ex.sets));
+    setReps(ex.reps);
+    setImage(ex.image || "");
+    setEditing(false);
+  }
+
+  function saveEdit() {
+    if (!name.trim()) return;
+    props.onSave(ex.id, {
+      name: name.trim(),
+      sets: Number(sets) || 1,
+      reps: reps.trim() || "-",
+      image: image.trim() || IMG_GERAL,
+    });
+    setEditing(false);
+  }
+
+  if (editing) {
+    return (
+      <div style={{ background: C.panelAlt, border: "1px solid " + C.blueDim, borderRadius: 12, padding: 12 }}>
+        <input type="text" placeholder="Nome do exercicio" value={name} onChange={function (e) { setName(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })} />
+        <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+          <input type="number" placeholder="Series" value={sets} onChange={function (e) { setSets(e.target.value); }} style={Object.assign({}, plainInputStyle, { width: 70 })} />
+          <input type="text" placeholder="Repeticoes" value={reps} onChange={function (e) { setReps(e.target.value); }} style={Object.assign({}, plainInputStyle, { flex: 1 })} />
+        </div>
+        <input type="text" placeholder="URL da imagem/GIF" value={image} onChange={function (e) { setImage(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 10 })} />
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={saveEdit} style={{ flex: 1, background: C.blue, border: "none", borderRadius: 8, color: C.white, fontSize: 13, fontWeight: 700, padding: "9px 0", cursor: "pointer" }}>
+            Salvar
+          </button>
+          <button onClick={cancelEdit} style={{ flex: 1, background: "transparent", border: "1px solid " + C.border, borderRadius: 8, color: C.silverDim, fontSize: 13, fontWeight: 700, padding: "9px 0", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}>
+            <X size={14} /> Cancelar
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, background: C.panel, border: "1px solid " + C.border, borderRadius: 12, padding: "10px 12px" }}>
+      <div style={{ width: 44, height: 44, borderRadius: 8, overflow: "hidden", flexShrink: 0, background: C.panelAlt }}>
+        <img src={ex.image || IMG_GERAL} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <p style={{ color: C.white, fontSize: 13.5, fontWeight: 700, margin: 0 }}>{ex.name}</p>
+        <p style={{ color: C.silverDim, fontSize: 12, margin: 0 }}>{ex.sets} series x {ex.reps} reps</p>
+      </div>
+      <button onClick={function () { setEditing(true); }} aria-label="Editar exercicio" style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid " + C.border, background: "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>
+        <Pencil size={14} color={C.blue} />
+      </button>
+      <button onClick={function () { props.onDelete(ex.id); }} aria-label="Excluir exercicio" style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid " + C.border, background: "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>
+        <Trash2 size={15} color={C.danger} />
+      </button>
     </div>
   );
 }
 
 // Painel do professor: le a lista de alunos de `profiles` (role = aluno)
-// e gerencia os exercicios daquele aluno na tabela `exercises`.
+// e gerencia (adiciona, edita, remove) os exercicios daquele aluno na tabela `exercises`.
 function ProfessorPanel(props) {
   var stateStudents = useState([]); var students = stateStudents[0]; var setStudents = stateStudents[1];
   var stateLoadingStudents = useState(true); var loadingStudents = stateLoadingStudents[0]; var setLoadingStudents = stateLoadingStudents[1];
@@ -586,6 +694,18 @@ function ProfessorPanel(props) {
     }
   }
 
+  async function saveEditExercise(exId, updates) {
+    var result = await supabase.from("exercises").update(updates).eq("id", exId).select();
+    if (!result.error && result.data && result.data.length > 0) {
+      var updatedRow = result.data[0];
+      setWorkout(function (prev) {
+        var next = Object.assign({}, prev);
+        next[tab] = next[tab].map(function (e) { return e.id === exId ? updatedRow : e; });
+        return next;
+      });
+    }
+  }
+
   async function deleteExercise(exId) {
     var result = await supabase.from("exercises").delete().eq("id", exId);
     if (!result.error) {
@@ -598,9 +718,9 @@ function ProfessorPanel(props) {
   }
 
   return (
-    <div style={{ minHeight: 600, background: C.bg, fontFamily: "system-ui, sans-serif", paddingBottom: 30 }}>
+    <PageContainer>
       <TopBrandBar />
-      <div style={{ padding: "12px 18px 0", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <button onClick={function () { setSelectedStudent(null); }} style={{ display: "flex", alignItems: "center", gap: 6, background: "transparent", border: "none", color: C.silverDim, fontSize: 12.5, cursor: "pointer" }}>
           <ArrowLeft size={14} /> Trocar aluno
         </button>
@@ -609,7 +729,7 @@ function ProfessorPanel(props) {
         </button>
       </div>
 
-      <div style={{ padding: "12px 18px 0", display: "flex", alignItems: "center", gap: 10 }}>
+      <div style={{ paddingTop: 12, display: "flex", alignItems: "center", gap: 10 }}>
         <Avatar name={selectedStudent.name} size={38} />
         <div>
           <p style={{ color: C.white, fontSize: 15, fontWeight: 800, margin: 0 }}>Treino de {selectedStudent.name.split(" ")[0]}</p>
@@ -617,7 +737,7 @@ function ProfessorPanel(props) {
         </div>
       </div>
 
-      <div style={{ padding: "18px 18px 0", display: "flex", gap: 8 }}>
+      <div style={{ paddingTop: 18, display: "flex", gap: 8 }}>
         {TABS.map(function (k) {
           var active = k === tab;
           return (
@@ -628,7 +748,7 @@ function ProfessorPanel(props) {
         })}
       </div>
 
-      <div style={{ padding: "16px 18px 0" }}>
+      <div style={{ paddingTop: 16 }}>
         {loadingWorkout ? (
           <p style={{ color: C.silverDim, fontSize: 13, textAlign: "center", padding: "12px 0" }}>Carregando exercicios...</p>
         ) : (
@@ -638,18 +758,12 @@ function ProfessorPanel(props) {
             ) : null}
             {list.map(function (ex) {
               return (
-                <div key={ex.id} style={{ display: "flex", alignItems: "center", gap: 10, background: C.panel, border: "1px solid " + C.border, borderRadius: 12, padding: "10px 12px" }}>
-                  <div style={{ width: 44, height: 44, borderRadius: 8, overflow: "hidden", flexShrink: 0, background: C.panelAlt }}>
-                    <img src={ex.image || IMG_GERAL} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ color: C.white, fontSize: 13.5, fontWeight: 700, margin: 0 }}>{ex.name}</p>
-                    <p style={{ color: C.silverDim, fontSize: 12, margin: 0 }}>{ex.sets} series x {ex.reps} reps</p>
-                  </div>
-                  <button onClick={function () { deleteExercise(ex.id); }} aria-label="Excluir exercicio" style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid " + C.border, background: "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>
-                    <Trash2 size={15} color={C.danger} />
-                  </button>
-                </div>
+                <ProfessorExerciseRow
+                  key={ex.id}
+                  ex={ex}
+                  onSave={saveEditExercise}
+                  onDelete={deleteExercise}
+                />
               );
             })}
           </div>
@@ -668,7 +782,7 @@ function ProfessorPanel(props) {
           </button>
         </div>
       </div>
-    </div>
+    </PageContainer>
   );
 }
 
@@ -678,7 +792,6 @@ export default function App() {
   var stateProfile = useState(null); var currentProfile = stateProfile[0]; var setCurrentProfile = stateProfile[1];
   var stateTeacherStudent = useState(null); var teacherStudent = stateTeacherStudent[0]; var setTeacherStudent = stateTeacherStudent[1];
 
-  // Ao carregar o app, verifica se ja existe uma sessao Supabase ativa (usuario ja logado antes).
   useEffect(function () {
     async function restoreSession() {
       var sessionResult = await supabase.auth.getSession();
@@ -735,5 +848,11 @@ export default function App() {
     );
   }
 
-  return <div style={{ width: "100%", maxWidth: 420, margin: "0 auto" }}>{content}</div>;
+  return (
+    <div style={{ minHeight: "100vh", width: "100%", background: C.bg }}>
+      <div style={{ width: "100%", maxWidth: 420, margin: "0 auto", minHeight: "100vh" }}>
+        {content}
+      </div>
+    </div>
+  );
 }
