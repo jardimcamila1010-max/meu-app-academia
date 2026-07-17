@@ -19,12 +19,32 @@ import {
   Loader2,
   Trophy,
   Eye,
+  BookOpen,
+  CalendarDays,
 } from "lucide-react";
 import { supabase } from "./supabaseClient.js";
 
 var LOGO_URL = "https://i.postimg.cc/NLQPwFC2/Whats-App-Image-2026-07-14-at-17-04-16.jpg";
 var IMG_GERAL = "https://images.unsplash.com/photo-1583454110551-21f2fa2afe61?w=500&q=80";
 var TABS = ["A", "B", "C"];
+
+var DAY_TABS = [
+  { key: "segunda", label: "Seg" },
+  { key: "terca", label: "Ter" },
+  { key: "quarta", label: "Qua" },
+  { key: "quinta", label: "Qui" },
+  { key: "sexta", label: "Sex" },
+  { key: "sabado", label: "Sab" },
+];
+var DAY_FULL_LABEL = {
+  domingo: "Domingo",
+  segunda: "Segunda-feira",
+  terca: "Terca-feira",
+  quarta: "Quarta-feira",
+  quinta: "Quinta-feira",
+  sexta: "Sexta-feira",
+  sabado: "Sabado",
+};
 var WEEK_DAY_LABELS = ["S", "T", "Q", "Q", "S", "S", "D"]; // Seg Ter Qua Qui Sex Sab Dom
 
 var INCENTIVE_PHRASES = [
@@ -74,6 +94,8 @@ var plainInputStyle = {
   outline: "none",
 };
 
+var textareaStyle = Object.assign({}, plainInputStyle, { resize: "vertical", minHeight: 60, fontFamily: "inherit" });
+
 function groupByTab(rows) {
   var grouped = { A: [], B: [], C: [] };
   for (var i = 0; i < rows.length; i++) {
@@ -81,6 +103,22 @@ function groupByTab(rows) {
     if (grouped[row.workout_tab]) grouped[row.workout_tab].push(row);
   }
   return grouped;
+}
+
+function groupByDay(rows) {
+  var grouped = {};
+  for (var i = 0; i < DAY_TABS.length; i++) grouped[DAY_TABS[i].key] = [];
+  for (var j = 0; j < rows.length; j++) {
+    var row = rows[j];
+    if (row.scheduled_day && grouped[row.scheduled_day]) grouped[row.scheduled_day].push(row);
+  }
+  return grouped;
+}
+
+function getTodayDayKey() {
+  var day = new Date().getDay(); // 0 domingo ... 6 sabado
+  var map = ["domingo", "segunda", "terca", "quarta", "quinta", "sexta", "sabado"];
+  return map[day];
 }
 
 function isSameDate(a, b) {
@@ -426,6 +464,18 @@ function StudentPicker(props) {
     <Shell>
       <BackButton onClick={props.onBack} />
       <Logo small />
+
+      <button
+        onClick={props.onOpenLibrary}
+        style={{
+          width: "100%", maxWidth: 380, display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+          background: C.panelAlt, border: "1px solid " + C.blueDim, borderRadius: 10, color: C.blue,
+          fontSize: 13, fontWeight: 700, padding: "10px 0", cursor: "pointer", marginBottom: 18,
+        }}
+      >
+        <BookOpen size={15} /> Gerenciar Biblioteca Geral
+      </button>
+
       <p style={{ color: C.silverDim, fontSize: 13, marginBottom: 20, marginTop: -8 }}>{props.title}</p>
       <div style={{ width: "100%", maxWidth: 380, display: "flex", flexDirection: "column", gap: 10 }}>
         {students.length === 0 ? (
@@ -444,7 +494,6 @@ function StudentPicker(props) {
           }
           return (
             <button
-              // s.id e sempre o UUID vindo de profiles (== auth.uid() do aluno) - nunca o telefone.
               key={s.id}
               onClick={function () { props.onPick(s); }}
               style={{ display: "flex", alignItems: "center", gap: 12, background: C.panel, border: "1px solid " + C.border, borderRadius: 12, padding: "12px 14px", cursor: "pointer", textAlign: "left" }}
@@ -483,21 +532,12 @@ function ProgressBar(props) {
 function HistoryDayModal(props) {
   return (
     <div
-      style={{
-        position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        padding: 20, zIndex: 60,
-      }}
+      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 60 }}
       onClick={props.onClose}
     >
-      <div
-        onClick={function (e) { e.stopPropagation(); }}
-        style={{ width: "100%", maxWidth: 320, background: C.panel, border: "1px solid " + C.blueDim, borderRadius: 16, padding: 22 }}
-      >
+      <div onClick={function (e) { e.stopPropagation(); }} style={{ width: "100%", maxWidth: 320, background: C.panel, border: "1px solid " + C.blueDim, borderRadius: 16, padding: 22 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-          <p style={{ color: C.white, fontSize: 14, fontWeight: 800, margin: 0 }}>
-            Historico de {formatFriendlyDate(props.date)}
-          </p>
+          <p style={{ color: C.white, fontSize: 14, fontWeight: 800, margin: 0 }}>Historico de {formatFriendlyDate(props.date)}</p>
           <button onClick={props.onClose} aria-label="Fechar" style={{ width: 28, height: 28, borderRadius: 8, border: "1px solid " + C.border, background: "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
             <X size={14} color={C.silverDim} />
           </button>
@@ -562,10 +602,7 @@ function WeeklyFrequency(props) {
             <button
               key={i}
               onClick={function () { setModalDay({ date: d, record: record }); }}
-              style={{
-                display: "flex", flexDirection: "column", alignItems: "center", gap: 4, flex: 1,
-                background: "transparent", border: "none", padding: 0, cursor: "pointer",
-              }}
+              style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, flex: 1, background: "transparent", border: "none", padding: 0, cursor: "pointer" }}
             >
               <span style={{ color: C.silverDim, fontSize: 10.5, fontWeight: 700 }}>{WEEK_DAY_LABELS[i]}</span>
               <div
@@ -586,12 +623,46 @@ function WeeklyFrequency(props) {
       </div>
 
       {modalDay ? (
-        <HistoryDayModal
-          date={modalDay.date}
-          record={modalDay.record}
-          onClose={function () { setModalDay(null); }}
-        />
+        <HistoryDayModal date={modalDay.date} record={modalDay.record} onClose={function () { setModalDay(null); }} />
       ) : null}
+    </div>
+  );
+}
+
+// Modal de detalhe do exercicio: duas fotos de execucao + observacoes do professor.
+function ExerciseDetailModal(props) {
+  var ex = props.ex;
+  return (
+    <div
+      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 70, overflowY: "auto" }}
+      onClick={props.onClose}
+    >
+      <div onClick={function (e) { e.stopPropagation(); }} style={{ width: "100%", maxWidth: 360, background: C.panel, border: "1px solid " + C.blueDim, borderRadius: 16, padding: 20, maxHeight: "85vh", overflowY: "auto" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+          <p style={{ color: C.white, fontSize: 15, fontWeight: 800, margin: 0 }}>{ex.name}</p>
+          <button onClick={props.onClose} aria-label="Fechar" style={{ width: 28, height: 28, borderRadius: 8, border: "1px solid " + C.border, background: "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>
+            <X size={14} color={C.silverDim} />
+          </button>
+        </div>
+
+        <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+          <div style={{ flex: 1, height: 130, borderRadius: 10, overflow: "hidden", background: C.panelAlt }}>
+            {ex.image ? <img src={ex.image} alt={ex.name + " posicao 1"} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}><ImageIcon size={22} color={C.silverDim} /></div>}
+          </div>
+          <div style={{ flex: 1, height: 130, borderRadius: 10, overflow: "hidden", background: C.panelAlt }}>
+            {ex.image2 ? <img src={ex.image2} alt={ex.name + " posicao 2"} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}><ImageIcon size={22} color={C.silverDim} /></div>}
+          </div>
+        </div>
+
+        <p style={{ color: C.silverDim, fontSize: 12.5, margin: "0 0 10px" }}>{ex.sets} series x {ex.reps} reps</p>
+
+        {ex.notes ? (
+          <div style={{ background: C.panelAlt, border: "1px solid " + C.border, borderRadius: 10, padding: 12 }}>
+            <p style={{ color: C.silverDim, fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, margin: "0 0 6px" }}>Observacoes Tecnicas</p>
+            <p style={{ color: C.white, fontSize: 13, margin: 0, lineHeight: 1.5 }}>{ex.notes}</p>
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -603,7 +674,7 @@ function ExerciseCard(props) {
 
   return (
     <div style={{ background: checked ? "rgba(47,134,198,0.08)" : C.panel, border: "1px solid " + (checked ? C.blueDim : C.border), borderRadius: 14, overflow: "hidden" }}>
-      <div style={{ width: "100%", height: 160, background: C.panelAlt }}>
+      <div style={{ width: "100%", height: 160, background: C.panelAlt, cursor: "pointer" }} onClick={function () { props.onOpenDetail(ex); }}>
         {ex.image && !imgError ? (
           <img src={ex.image} alt={ex.name} onError={function () { setImgError(true); }} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
         ) : (
@@ -614,12 +685,12 @@ function ExerciseCard(props) {
       </div>
 
       <div style={{ padding: 14, display: "flex", gap: 12, alignItems: "center" }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ flex: 1, minWidth: 0, cursor: "pointer" }} onClick={function () { props.onOpenDetail(ex); }}>
           <p style={{ color: C.white, fontSize: 14, fontWeight: 700, margin: "0 0 4px", textDecoration: checked ? "line-through" : "none", opacity: checked ? 0.6 : 1 }}>
             {ex.name}
           </p>
           <p style={{ color: C.silverDim, fontSize: 12.5, margin: "0 0 8px" }}>{ex.sets} series x {ex.reps} reps</p>
-          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }} onClick={function (e) { e.stopPropagation(); }}>
             <label style={{ color: C.silverDim, fontSize: 12 }}>Carga</label>
             <input
               type="number" inputMode="decimal" placeholder="0"
@@ -639,8 +710,6 @@ function ExerciseCard(props) {
   );
 }
 
-// Tela "Missao Cumprida" exibida quando o aluno ja finalizou um treino hoje.
-// Substitui a lista de exercicios ate ele clicar em "Ver exercicios novamente".
 function MissionAccomplishedScreen(props) {
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", paddingTop: 40, paddingBottom: 20 }}>
@@ -671,11 +740,7 @@ function MissionAccomplishedScreen(props) {
 
       <button
         onClick={props.onViewExercises}
-        style={{
-          display: "flex", alignItems: "center", gap: 6,
-          background: "transparent", border: "1px solid " + C.border, borderRadius: 8,
-          color: C.silverDim, fontSize: 12.5, fontWeight: 600, padding: "9px 16px", cursor: "pointer",
-        }}
+        style={{ display: "flex", alignItems: "center", gap: 6, background: "transparent", border: "1px solid " + C.border, borderRadius: 8, color: C.silverDim, fontSize: 12.5, fontWeight: 600, padding: "9px 16px", cursor: "pointer" }}
       >
         <Eye size={14} /> Ver exercicios novamente
       </button>
@@ -683,11 +748,25 @@ function MissionAccomplishedScreen(props) {
   );
 }
 
+// Banner exibido quando ha um treino agendado para o dia de hoje.
+function TodayReadyBanner(props) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, background: "rgba(47,134,198,0.1)", border: "1px solid " + C.blueDim, borderRadius: 12, padding: "12px 14px", marginBottom: 16 }}>
+      <div style={{ width: 34, height: 34, borderRadius: "50%", background: C.blueDeep, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+        <CalendarDays size={16} color={C.blue} />
+      </div>
+      <p style={{ color: C.white, fontSize: 12.5, fontWeight: 600, margin: 0, lineHeight: 1.4 }}>
+        Seu treino de hoje ({props.dayLabel}) esta pronto!
+      </p>
+    </div>
+  );
+}
+
 // Painel do aluno.
 function AlunoDashboard(props) {
-  var student = props.student; // student.id e sempre o UUID (profiles.id == auth.uid())
+  var student = props.student;
+  var stateAllExercises = useState([]); var allExercises = stateAllExercises[0]; var setAllExercises = stateAllExercises[1];
   var stateTab = useState("A"); var tab = stateTab[0]; var setTab = stateTab[1];
-  var stateWorkout = useState({ A: [], B: [], C: [] }); var workout = stateWorkout[0]; var setWorkout = stateWorkout[1];
   var stateLoading = useState(true); var loading = stateLoading[0]; var setLoading = stateLoading[1];
   var stateWeights = useState({}); var weights = stateWeights[0]; var setWeights = stateWeights[1];
   var stateFinishing = useState(false); var finishing = stateFinishing[0]; var setFinishing = stateFinishing[1];
@@ -695,6 +774,11 @@ function AlunoDashboard(props) {
   var stateHistoryRecords = useState([]); var historyRecords = stateHistoryRecords[0]; var setHistoryRecords = stateHistoryRecords[1];
   var statePhrase = useState(pickRandomPhrase); var phrase = statePhrase[0];
   var stateForceView = useState(false); var forceView = stateForceView[0]; var setForceView = stateForceView[1];
+  var stateManualBrowse = useState(false); var manualBrowse = stateManualBrowse[0]; var setManualBrowse = stateManualBrowse[1];
+  var stateDetailEx = useState(null); var detailEx = stateDetailEx[0]; var setDetailEx = stateDetailEx[1];
+
+  var todayKey = getTodayDayKey();
+  var todayLabel = DAY_FULL_LABEL[todayKey];
 
   async function fetchExercises() {
     var result = await supabase
@@ -704,7 +788,7 @@ function AlunoDashboard(props) {
       .order("created_at", { ascending: true });
 
     if (!result.error && result.data) {
-      setWorkout(groupByTab(result.data));
+      setAllExercises(result.data);
     }
     return result;
   }
@@ -729,12 +813,19 @@ function AlunoDashboard(props) {
     return function () { cancelled = true; };
   }, [student.id]);
 
+  var workoutByTab = groupByTab(allExercises);
+  var todayScheduled = allExercises.filter(function (e) { return e.scheduled_day === todayKey; });
+  var hasTodaySchedule = todayScheduled.length > 0;
+
+  // Lista efetivamente exibida: se ha treino agendado para hoje e o aluno
+  // nao pediu para navegar manualmente por A/B/C, mostra o agendado.
+  var displayList = (hasTodaySchedule && !manualBrowse) ? todayScheduled : workoutByTab[tab];
+  var effectiveTab = (hasTodaySchedule && !manualBrowse && todayScheduled[0]) ? todayScheduled[0].workout_tab : tab;
+
   async function toggle(ex) {
     var newValue = !ex.is_completed;
-    setWorkout(function (prev) {
-      var next = Object.assign({}, prev);
-      next[tab] = next[tab].map(function (e) { return e.id === ex.id ? Object.assign({}, e, { is_completed: newValue }) : e; });
-      return next;
+    setAllExercises(function (prev) {
+      return prev.map(function (e) { return e.id === ex.id ? Object.assign({}, e, { is_completed: newValue }) : e; });
     });
 
     var result = await supabase
@@ -745,16 +836,14 @@ function AlunoDashboard(props) {
       .select();
 
     if (result.error || !result.data || result.data.length === 0) {
-      setWorkout(function (prev) {
-        var next = Object.assign({}, prev);
-        next[tab] = next[tab].map(function (e) { return e.id === ex.id ? Object.assign({}, e, { is_completed: !newValue }) : e; });
-        return next;
+      setAllExercises(function (prev) {
+        return prev.map(function (e) { return e.id === ex.id ? Object.assign({}, e, { is_completed: !newValue }) : e; });
       });
     }
   }
 
   function setWeight(exId, val) {
-    var key = student.id + "-" + tab + "-" + exId;
+    var key = student.id + "-" + effectiveTab + "-" + exId;
     setWeights(function (prev) {
       var next = Object.assign({}, prev);
       next[key] = val;
@@ -762,15 +851,9 @@ function AlunoDashboard(props) {
     });
   }
 
-  // Zera is_completed do treino em segundo plano, sem travar a tela
-  // (a "Missao Cumprida" ja esta visivel enquanto isso roda).
-  async function resetTodayWorkoutSilently(tabToReset) {
-    await supabase
-      .from("exercises")
-      .update({ is_completed: false })
-      .eq("student_id", student.id)
-      .eq("workout_tab", tabToReset)
-      .select();
+  async function resetTodayWorkoutSilently(exIds) {
+    if (exIds.length === 0) return;
+    await supabase.from("exercises").update({ is_completed: false }).in("id", exIds).select();
     await fetchExercises();
   }
 
@@ -778,9 +861,9 @@ function AlunoDashboard(props) {
     setFinishing(true);
     setFinishError("");
 
-    var list = workout[tab];
+    var list = displayList;
     var snapshot = list.map(function (ex) {
-      var key = student.id + "-" + tab + "-" + ex.id;
+      var key = student.id + "-" + effectiveTab + "-" + ex.id;
       return {
         name: ex.name,
         sets: ex.sets,
@@ -791,7 +874,7 @@ function AlunoDashboard(props) {
     });
 
     var insertResult = await supabase.from("workout_history").insert([
-      { student_id: student.id, workout_tab: tab, summary_data: snapshot },
+      { student_id: student.id, workout_tab: effectiveTab, summary_data: snapshot },
     ]).select();
 
     setFinishing(false);
@@ -806,9 +889,8 @@ function AlunoDashboard(props) {
     }
     setForceView(false);
 
-    // Reset silencioso em segundo plano: nao aguardamos travando a UI da
-    // "Missao Cumprida", que ja aparece assim que o historico foi salvo.
-    resetTodayWorkoutSilently(tab);
+    var idsToReset = list.map(function (ex) { return ex.id; });
+    resetTodayWorkoutSilently(idsToReset);
   }
 
   var todayRecord = null;
@@ -820,10 +902,9 @@ function AlunoDashboard(props) {
   }
   var hasFinishedToday = !!todayRecord;
 
-  var list = workout[tab];
   var doneCount = 0;
-  for (var j = 0; j < list.length; j++) {
-    if (list[j].is_completed) doneCount++;
+  for (var j = 0; j < displayList.length; j++) {
+    if (displayList[j].is_completed) doneCount++;
   }
 
   var showMissionScreen = hasFinishedToday && !forceView && !loading;
@@ -865,39 +946,57 @@ function AlunoDashboard(props) {
             {formatFriendlyDate(new Date())}
           </p>
 
-          <div style={{ display: "flex", gap: 8 }}>
-            {TABS.map(function (k) {
-              var active = k === tab;
-              return (
-                <button key={k} onClick={function () { setTab(k); }} style={{ flex: 1, padding: "10px 8px", borderRadius: 10, border: "1px solid " + (active ? C.blue : C.border), background: active ? C.blueDeep : C.panel, color: active ? C.white : C.silverDim, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
-                  Treino {k}
-                </button>
-              );
-            })}
-          </div>
+          {hasTodaySchedule && !manualBrowse ? (
+            <TodayReadyBanner dayLabel={todayLabel} />
+          ) : null}
 
-          <div style={{ paddingTop: 16 }}>
+          {hasTodaySchedule ? (
+            <button
+              onClick={function () { setManualBrowse(function (v) { return !v; }); }}
+              style={{ width: "100%", marginBottom: 14, background: "transparent", border: "1px solid " + C.border, borderRadius: 8, color: C.silverDim, fontSize: 12, fontWeight: 600, padding: "8px 0", cursor: "pointer" }}
+            >
+              {manualBrowse ? "Voltar ao treino de hoje" : "Ver treino por A / B / C"}
+            </button>
+          ) : null}
+
+          {(!hasTodaySchedule || manualBrowse) ? (
+            <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+              {TABS.map(function (k) {
+                var active = k === tab;
+                return (
+                  <button key={k} onClick={function () { setTab(k); }} style={{ flex: 1, padding: "10px 8px", borderRadius: 10, border: "1px solid " + (active ? C.blue : C.border), background: active ? C.blueDeep : C.panel, color: active ? C.white : C.silverDim, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+                    Treino {k}
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
+
+          <div>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
               <Flame size={16} color={C.blue} />
-              <h2 style={{ color: C.white, fontSize: 16, fontWeight: 800, margin: 0 }}>Treino {tab}</h2>
+              <h2 style={{ color: C.white, fontSize: 16, fontWeight: 800, margin: 0 }}>
+                {hasTodaySchedule && !manualBrowse ? "Treino de Hoje" : "Treino " + tab}
+              </h2>
             </div>
 
-            <ProgressBar done={doneCount} total={list.length} />
+            <ProgressBar done={doneCount} total={displayList.length} />
 
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              {list.length === 0 ? (
+              {displayList.length === 0 ? (
                 <p style={{ color: C.silverDim, fontSize: 13, textAlign: "center", padding: "20px 0" }}>
-                  Nenhum exercicio cadastrado neste treino ainda.
+                  Nenhum exercicio cadastrado ainda.
                 </p>
               ) : null}
-              {list.map(function (ex) {
+              {displayList.map(function (ex) {
                 return (
                   <ExerciseCard
                     key={ex.id}
                     ex={ex}
-                    weight={weights[student.id + "-" + tab + "-" + ex.id]}
+                    weight={weights[student.id + "-" + effectiveTab + "-" + ex.id]}
                     onToggle={toggle}
                     onWeightChange={setWeight}
+                    onOpenDetail={setDetailEx}
                   />
                 );
               })}
@@ -907,15 +1006,11 @@ function AlunoDashboard(props) {
               <p style={{ color: C.danger, fontSize: 12.5, marginTop: 10, textAlign: "center" }}>{finishError}</p>
             ) : null}
 
-            {list.length > 0 ? (
+            {displayList.length > 0 ? (
               <button
                 onClick={finishWorkout}
                 disabled={finishing}
-                style={{
-                  width: "100%", marginTop: 18, background: C.blue, border: "none", borderRadius: 10,
-                  color: C.white, fontSize: 14, fontWeight: 700, padding: "13px 0", cursor: "pointer",
-                  opacity: finishing ? 0.7 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-                }}
+                style={{ width: "100%", marginTop: 18, background: C.blue, border: "none", borderRadius: 10, color: C.white, fontSize: 14, fontWeight: 700, padding: "13px 0", cursor: "pointer", opacity: finishing ? 0.7 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
               >
                 {finishing ? <Spinner size={16} /> : <Flame size={16} />}
                 {finishing ? "Salvando..." : "Finalizar Treino de Hoje"}
@@ -933,6 +1028,8 @@ function AlunoDashboard(props) {
           </div>
         </React.Fragment>
       )}
+
+      {detailEx ? <ExerciseDetailModal ex={detailEx} onClose={function () { setDetailEx(null); }} /> : null}
     </PageContainer>
   );
 }
@@ -944,12 +1041,18 @@ function ProfessorExerciseRow(props) {
   var stateSets = useState(String(ex.sets)); var sets = stateSets[0]; var setSets = stateSets[1];
   var stateReps = useState(ex.reps); var reps = stateReps[0]; var setReps = stateReps[1];
   var stateImage = useState(ex.image || ""); var image = stateImage[0]; var setImage = stateImage[1];
+  var stateImage2 = useState(ex.image2 || ""); var image2 = stateImage2[0]; var setImage2 = stateImage2[1];
+  var stateTabVal = useState(ex.workout_tab); var tabVal = stateTabVal[0]; var setTabVal = stateTabVal[1];
+  var stateNotes = useState(ex.notes || ""); var notes = stateNotes[0]; var setNotes = stateNotes[1];
 
   function cancelEdit() {
     setName(ex.name);
     setSets(String(ex.sets));
     setReps(ex.reps);
     setImage(ex.image || "");
+    setImage2(ex.image2 || "");
+    setTabVal(ex.workout_tab);
+    setNotes(ex.notes || "");
     setEditing(false);
   }
 
@@ -960,6 +1063,9 @@ function ProfessorExerciseRow(props) {
       sets: Number(sets) || 1,
       reps: reps.trim() || "-",
       image: image.trim() || IMG_GERAL,
+      image2: image2.trim() || null,
+      workout_tab: tabVal,
+      notes: notes.trim() || null,
     });
     setEditing(false);
   }
@@ -971,12 +1077,15 @@ function ProfessorExerciseRow(props) {
         <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
           <input type="number" placeholder="Series" value={sets} onChange={function (e) { setSets(e.target.value); }} style={Object.assign({}, plainInputStyle, { width: 70 })} />
           <input type="text" placeholder="Repeticoes" value={reps} onChange={function (e) { setReps(e.target.value); }} style={Object.assign({}, plainInputStyle, { flex: 1 })} />
+          <select value={tabVal} onChange={function (e) { setTabVal(e.target.value); }} style={Object.assign({}, plainInputStyle, { width: 60, padding: "10px 4px" })}>
+            {TABS.map(function (t) { return <option key={t} value={t}>{t}</option>; })}
+          </select>
         </div>
-        <input type="text" placeholder="URL da imagem/GIF" value={image} onChange={function (e) { setImage(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 10 })} />
+        <input type="text" placeholder="URL da foto 1" value={image} onChange={function (e) { setImage(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })} />
+        <input type="text" placeholder="URL da foto 2" value={image2} onChange={function (e) { setImage2(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })} />
+        <textarea placeholder="Observacoes Tecnicas" value={notes} onChange={function (e) { setNotes(e.target.value); }} style={Object.assign({}, textareaStyle, { marginBottom: 10 })} />
         <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={saveEdit} style={{ flex: 1, background: C.blue, border: "none", borderRadius: 8, color: C.white, fontSize: 13, fontWeight: 700, padding: "9px 0", cursor: "pointer" }}>
-            Salvar
-          </button>
+          <button onClick={saveEdit} style={{ flex: 1, background: C.blue, border: "none", borderRadius: 8, color: C.white, fontSize: 13, fontWeight: 700, padding: "9px 0", cursor: "pointer" }}>Salvar</button>
           <button onClick={cancelEdit} style={{ flex: 1, background: "transparent", border: "1px solid " + C.border, borderRadius: 8, color: C.silverDim, fontSize: 13, fontWeight: 700, padding: "9px 0", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}>
             <X size={14} /> Cancelar
           </button>
@@ -991,8 +1100,12 @@ function ProfessorExerciseRow(props) {
         <img src={ex.image || IMG_GERAL} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <p style={{ color: C.white, fontSize: 13.5, fontWeight: 700, margin: 0 }}>{ex.name}</p>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <p style={{ color: C.white, fontSize: 13.5, fontWeight: 700, margin: 0 }}>{ex.name}</p>
+          <span style={{ background: C.blueDeep, color: C.blue, fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 5 }}>{ex.workout_tab}</span>
+        </div>
         <p style={{ color: C.silverDim, fontSize: 12, margin: 0 }}>{ex.sets} series x {ex.reps} reps</p>
+        {ex.notes ? <p style={{ color: C.silverDim, fontSize: 11, margin: "2px 0 0", fontStyle: "italic" }}>{ex.notes}</p> : null}
       </div>
       <button onClick={function () { setEditing(true); }} aria-label="Editar exercicio" style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid " + C.border, background: "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>
         <Pencil size={14} color={C.blue} />
@@ -1015,9 +1128,7 @@ function RecentHistoryList(props) {
     <div style={{ marginBottom: 18 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
         <History size={14} color={C.blue} />
-        <p style={{ color: C.silverDim, fontSize: 11.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, margin: 0 }}>
-          Ultimos Treinos Concluidos
-        </p>
+        <p style={{ color: C.silverDim, fontSize: 11.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, margin: 0 }}>Ultimos Treinos Concluidos</p>
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         {props.records.map(function (r) {
@@ -1033,22 +1144,124 @@ function RecentHistoryList(props) {
   );
 }
 
+// Tela de gerenciamento da Biblioteca Geral de exercicios.
+function LibraryManager(props) {
+  var stateItems = useState([]); var items = stateItems[0]; var setItems = stateItems[1];
+  var stateLoading = useState(true); var loading = stateLoading[0]; var setLoading = stateLoading[1];
+  var stateName = useState(""); var name = stateName[0]; var setName = stateName[1];
+  var stateImage = useState(""); var image = stateImage[0]; var setImage = stateImage[1];
+  var stateImage2 = useState(""); var image2 = stateImage2[0]; var setImage2 = stateImage2[1];
+  var stateCategory = useState(""); var category = stateCategory[0]; var setCategory = stateCategory[1];
+  var stateSaving = useState(false); var saving = stateSaving[0]; var setSaving = stateSaving[1];
+
+  async function loadItems() {
+    setLoading(true);
+    var result = await supabase.from("exercise_library").select("*").order("created_at", { ascending: false });
+    if (!result.error && result.data) setItems(result.data);
+    setLoading(false);
+  }
+
+  useEffect(function () { loadItems(); }, []);
+
+  async function addItem() {
+    if (!name.trim()) return;
+    setSaving(true);
+    var result = await supabase.from("exercise_library").insert([
+      { name: name.trim(), image: image.trim() || null, image2: image2.trim() || null, category: category.trim() || null },
+    ]).select();
+    setSaving(false);
+    if (!result.error && result.data) {
+      setItems(function (prev) { return result.data.concat(prev); });
+      setName("");
+      setImage("");
+      setImage2("");
+      setCategory("");
+    }
+  }
+
+  async function deleteItem(id) {
+    var result = await supabase.from("exercise_library").delete().eq("id", id);
+    if (!result.error) {
+      setItems(function (prev) { return prev.filter(function (it) { return it.id !== id; }); });
+    }
+  }
+
+  return (
+    <PageContainer>
+      <TopBrandBar />
+      <button onClick={props.onBack} style={{ display: "flex", alignItems: "center", gap: 6, background: "transparent", border: "none", color: C.silverDim, fontSize: 13, cursor: "pointer", marginBottom: 12 }}>
+        <ArrowLeft size={15} /> Voltar
+      </button>
+
+      <p style={{ color: C.white, fontSize: 17, fontWeight: 800, margin: "0 0 4px" }}>Biblioteca Geral</p>
+      <p style={{ color: C.silverDim, fontSize: 12.5, margin: "0 0 18px" }}>Cadastre exercicios reutilizaveis para agilizar o planejamento.</p>
+
+      <div style={{ background: C.panelAlt, border: "1px solid " + C.border, borderRadius: 12, padding: 12, marginBottom: 20 }}>
+        <input type="text" placeholder="Nome do exercicio" value={name} onChange={function (e) { setName(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })} />
+        <input type="text" placeholder="URL da foto 1" value={image} onChange={function (e) { setImage(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })} />
+        <input type="text" placeholder="URL da foto 2" value={image2} onChange={function (e) { setImage2(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })} />
+        <input type="text" placeholder="Categoria (ex: Pernas, Peito)" value={category} onChange={function (e) { setCategory(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 10 })} />
+        <button onClick={addItem} disabled={saving} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: C.blue, border: "none", borderRadius: 8, color: C.white, fontSize: 13, fontWeight: 700, padding: "10px 0", cursor: "pointer", opacity: saving ? 0.7 : 1 }}>
+          {saving ? <Spinner size={14} /> : <Plus size={15} />}
+          {saving ? "Salvando..." : "Adicionar a Biblioteca"}
+        </button>
+      </div>
+
+      {loading ? (
+        <p style={{ color: C.silverDim, fontSize: 13, textAlign: "center" }}>Carregando biblioteca...</p>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {items.length === 0 ? (
+            <p style={{ color: C.silverDim, fontSize: 13, textAlign: "center" }}>Nenhum exercicio na biblioteca ainda.</p>
+          ) : null}
+          {items.map(function (it) {
+            return (
+              <div key={it.id} style={{ display: "flex", alignItems: "center", gap: 10, background: C.panel, border: "1px solid " + C.border, borderRadius: 12, padding: "10px 12px" }}>
+                <div style={{ width: 40, height: 40, borderRadius: 8, overflow: "hidden", flexShrink: 0, background: C.panelAlt }}>
+                  <img src={it.image || IMG_GERAL} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ color: C.white, fontSize: 13, fontWeight: 700, margin: 0 }}>{it.name}</p>
+                  {it.category ? <p style={{ color: C.silverDim, fontSize: 11.5, margin: 0 }}>{it.category}</p> : null}
+                </div>
+                <button onClick={function () { deleteItem(it.id); }} aria-label="Excluir da biblioteca" style={{ width: 30, height: 30, borderRadius: 8, border: "1px solid " + C.border, background: "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>
+                  <Trash2 size={14} color={C.danger} />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </PageContainer>
+  );
+}
+
+// Painel do professor: planejamento semanal (Seg-Sab) por aluno,
+// selecao a partir da Biblioteca com preenchimento automatico, e
+// campo de Observacoes Tecnicas por exercicio.
 function ProfessorPanel(props) {
+  var stateMode = useState("students"); var mode = stateMode[0]; var setMode = stateMode[1]; // 'students' | 'library'
   var stateStudents = useState([]); var students = stateStudents[0]; var setStudents = stateStudents[1];
   var stateLoadingStudents = useState(true); var loadingStudents = stateLoadingStudents[0]; var setLoadingStudents = stateLoadingStudents[1];
 
   var stateSelected = useState(null); var selectedStudent = stateSelected[0]; var setSelectedStudent = stateSelected[1];
-  var stateTab = useState("A"); var tab = stateTab[0]; var setTab = stateTab[1];
-  var stateWorkout = useState({ A: [], B: [], C: [] }); var workout = stateWorkout[0]; var setWorkout = stateWorkout[1];
+  var stateDay = useState(DAY_TABS[0].key); var day = stateDay[0]; var setDay = stateDay[1];
+  var stateAllExercises = useState([]); var allExercises = stateAllExercises[0]; var setAllExercises = stateAllExercises[1];
   var stateLoadingWorkout = useState(false); var loadingWorkout = stateLoadingWorkout[0]; var setLoadingWorkout = stateLoadingWorkout[1];
 
   var stateHistoryRecords = useState([]); var historyRecords = stateHistoryRecords[0]; var setHistoryRecords = stateHistoryRecords[1];
   var stateLoadingHistory = useState(false); var loadingHistory = stateLoadingHistory[0]; var setLoadingHistory = stateLoadingHistory[1];
 
+  var stateLibrary = useState([]); var library = stateLibrary[0]; var setLibrary = stateLibrary[1];
+
+  var stateLibrarySelectId = useState(""); var librarySelectId = stateLibrarySelectId[0]; var setLibrarySelectId = stateLibrarySelectId[1];
   var stateName = useState(""); var newName = stateName[0]; var setNewName = stateName[1];
   var stateSets = useState("3"); var newSets = stateSets[0]; var setNewSets = stateSets[1];
   var stateReps = useState("10-12"); var newReps = stateReps[0]; var setNewReps = stateReps[1];
   var stateImage = useState(""); var newImage = stateImage[0]; var setNewImage = stateImage[1];
+  var stateImage2 = useState(""); var newImage2 = stateImage2[0]; var setNewImage2 = stateImage2[1];
+  var stateWorkoutTab = useState("A"); var newWorkoutTab = stateWorkoutTab[0]; var setNewWorkoutTab = stateWorkoutTab[1];
+  var stateNotes = useState(""); var newNotes = stateNotes[0]; var setNewNotes = stateNotes[1];
 
   useEffect(function () {
     async function loadStudentsAndHistory() {
@@ -1059,18 +1272,13 @@ function ProfessorPanel(props) {
         return;
       }
 
-      var historyResult = await supabase
-        .from("workout_history")
-        .select("*")
-        .order("created_at", { ascending: false });
+      var historyResult = await supabase.from("workout_history").select("*").order("created_at", { ascending: false });
 
       var latestByStudent = {};
       if (!historyResult.error && historyResult.data) {
         for (var i = 0; i < historyResult.data.length; i++) {
           var row = historyResult.data[i];
-          if (!latestByStudent[row.student_id]) {
-            latestByStudent[row.student_id] = row;
-          }
+          if (!latestByStudent[row.student_id]) latestByStudent[row.student_id] = row;
         }
       }
 
@@ -1082,6 +1290,12 @@ function ProfessorPanel(props) {
       setLoadingStudents(false);
     }
     loadStudentsAndHistory();
+
+    async function loadLibrary() {
+      var result = await supabase.from("exercise_library").select("*").order("name", { ascending: true });
+      if (!result.error && result.data) setLibrary(result.data);
+    }
+    loadLibrary();
   }, []);
 
   useEffect(function () {
@@ -1095,7 +1309,7 @@ function ProfessorPanel(props) {
       var historyResult = await supabase.from("workout_history").select("*").eq("student_id", selectedStudent.id).order("created_at", { ascending: false }).limit(5);
 
       if (!cancelled) {
-        if (!exercisesResult.error && exercisesResult.data) setWorkout(groupByTab(exercisesResult.data));
+        if (!exercisesResult.error && exercisesResult.data) setAllExercises(exercisesResult.data);
         setLoadingWorkout(false);
 
         if (!historyResult.error && historyResult.data) setHistoryRecords(historyResult.data);
@@ -1106,40 +1320,59 @@ function ProfessorPanel(props) {
     return function () { cancelled = true; };
   }, [selectedStudent]);
 
+  if (mode === "library") {
+    return <LibraryManager onBack={function () { setMode("students"); }} />;
+  }
+
   if (!selectedStudent) {
     return (
       <StudentPicker
-        title={loadingStudents ? "Carregando alunos..." : "Selecione o aluno para editar o treino"}
+        title={loadingStudents ? "Carregando alunos..." : "Selecione o aluno para planejar o treino"}
         onPick={setSelectedStudent}
         onBack={props.onExit}
+        onOpenLibrary={function () { setMode("library"); }}
         students={students}
       />
     );
   }
 
-  var list = workout[tab];
+  var byDay = groupByDay(allExercises);
+  var list = byDay[day];
+
+  function handleLibrarySelect(id) {
+    setLibrarySelectId(id);
+    if (!id) return;
+    var item = library.find(function (it) { return it.id === id; });
+    if (item) {
+      setNewName(item.name);
+      setNewImage(item.image || "");
+      setNewImage2(item.image2 || "");
+    }
+  }
 
   async function addExercise() {
     if (!newName.trim()) return;
     var payload = {
       student_id: selectedStudent.id,
-      workout_tab: tab,
+      workout_tab: newWorkoutTab,
+      scheduled_day: day,
       name: newName.trim(),
       sets: Number(newSets) || 1,
       reps: newReps.trim() || "-",
       image: newImage.trim() || IMG_GERAL,
+      image2: newImage2.trim() || null,
+      notes: newNotes.trim() || null,
     };
     var result = await supabase.from("exercises").insert([payload]).select();
     if (!result.error && result.data) {
-      setWorkout(function (prev) {
-        var next = Object.assign({}, prev);
-        next[tab] = next[tab].concat(result.data);
-        return next;
-      });
+      setAllExercises(function (prev) { return prev.concat(result.data); });
+      setLibrarySelectId("");
       setNewName("");
       setNewSets("3");
       setNewReps("10-12");
       setNewImage("");
+      setNewImage2("");
+      setNewNotes("");
     }
   }
 
@@ -1147,22 +1380,14 @@ function ProfessorPanel(props) {
     var result = await supabase.from("exercises").update(updates).eq("id", exId).select();
     if (!result.error && result.data && result.data.length > 0) {
       var updatedRow = result.data[0];
-      setWorkout(function (prev) {
-        var next = Object.assign({}, prev);
-        next[tab] = next[tab].map(function (e) { return e.id === exId ? updatedRow : e; });
-        return next;
-      });
+      setAllExercises(function (prev) { return prev.map(function (e) { return e.id === exId ? updatedRow : e; }); });
     }
   }
 
   async function deleteExercise(exId) {
     var result = await supabase.from("exercises").delete().eq("id", exId);
     if (!result.error) {
-      setWorkout(function (prev) {
-        var next = Object.assign({}, prev);
-        next[tab] = next[tab].filter(function (e) { return e.id !== exId; });
-        return next;
-      });
+      setAllExercises(function (prev) { return prev.filter(function (e) { return e.id !== exId; }); });
     }
   }
 
@@ -1181,59 +1406,67 @@ function ProfessorPanel(props) {
       <div style={{ paddingTop: 12, display: "flex", alignItems: "center", gap: 10 }}>
         <Avatar name={selectedStudent.name} size={38} />
         <div>
-          <p style={{ color: C.white, fontSize: 15, fontWeight: 800, margin: 0 }}>Treino de {selectedStudent.name.split(" ")[0]}</p>
+          <p style={{ color: C.white, fontSize: 15, fontWeight: 800, margin: 0 }}>Planejamento de {selectedStudent.name.split(" ")[0]}</p>
           <p style={{ color: C.silverDim, fontSize: 11.5, margin: 0 }}>Painel do professor - {selectedStudent.phone}</p>
         </div>
       </div>
 
-      <p style={{ color: C.silverDim, fontSize: 11.5, margin: "8px 0 16px" }}>
-        {formatFriendlyDate(new Date())}
-      </p>
+      <p style={{ color: C.silverDim, fontSize: 11.5, margin: "8px 0 16px" }}>{formatFriendlyDate(new Date())}</p>
 
       <RecentHistoryList records={historyRecords} loading={loadingHistory} />
 
-      <div style={{ display: "flex", gap: 8 }}>
-        {TABS.map(function (k) {
-          var active = k === tab;
+      <p style={{ color: C.silverDim, fontSize: 11.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>Planejamento Semanal</p>
+      <div style={{ display: "flex", gap: 6, marginBottom: 16, overflowX: "auto" }}>
+        {DAY_TABS.map(function (d) {
+          var active = d.key === day;
           return (
-            <button key={k} onClick={function () { setTab(k); }} style={{ flex: 1, padding: "10px 8px", borderRadius: 10, border: "1px solid " + (active ? C.blue : C.border), background: active ? C.blueDeep : C.panel, color: active ? C.white : C.silverDim, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
-              Treino {k}
+            <button key={d.key} onClick={function () { setDay(d.key); }} style={{ flex: 1, minWidth: 46, padding: "9px 4px", borderRadius: 10, border: "1px solid " + (active ? C.blue : C.border), background: active ? C.blueDeep : C.panel, color: active ? C.white : C.silverDim, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>
+              {d.label}
             </button>
           );
         })}
       </div>
 
-      <div style={{ paddingTop: 16 }}>
+      <div>
         {loadingWorkout ? (
           <p style={{ color: C.silverDim, fontSize: 13, textAlign: "center", padding: "12px 0" }}>Carregando exercicios...</p>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
             {list.length === 0 ? (
-              <p style={{ color: C.silverDim, fontSize: 13, textAlign: "center", padding: "12px 0" }}>Nenhum exercicio neste treino. Adicione um abaixo.</p>
+              <p style={{ color: C.silverDim, fontSize: 13, textAlign: "center", padding: "12px 0" }}>Nenhum exercicio agendado para {DAY_FULL_LABEL[day]}. Adicione abaixo.</p>
             ) : null}
             {list.map(function (ex) {
               return (
-                <ProfessorExerciseRow
-                  key={ex.id}
-                  ex={ex}
-                  onSave={saveEditExercise}
-                  onDelete={deleteExercise}
-                />
+                <ProfessorExerciseRow key={ex.id} ex={ex} onSave={saveEditExercise} onDelete={deleteExercise} />
               );
             })}
           </div>
         )}
 
         <div style={{ background: C.panelAlt, border: "1px solid " + C.border, borderRadius: 12, padding: 12 }}>
-          <p style={{ color: C.silverDim, fontSize: 11.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, margin: "0 0 8px" }}>Adicionar exercicio</p>
+          <p style={{ color: C.silverDim, fontSize: 11.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, margin: "0 0 8px" }}>
+            Adicionar exercicio para {DAY_FULL_LABEL[day]}
+          </p>
+
+          <select value={librarySelectId} onChange={function (e) { handleLibrarySelect(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })}>
+            <option value="">Selecionar da Biblioteca (opcional)</option>
+            {library.map(function (it) { return <option key={it.id} value={it.id}>{it.name}</option>; })}
+          </select>
+
           <input type="text" placeholder="Nome do exercicio" value={newName} onChange={function (e) { setNewName(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })} />
           <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
             <input type="number" placeholder="Series" value={newSets} onChange={function (e) { setNewSets(e.target.value); }} style={Object.assign({}, plainInputStyle, { width: 70 })} />
             <input type="text" placeholder="Repeticoes (ex: 10-12)" value={newReps} onChange={function (e) { setNewReps(e.target.value); }} style={Object.assign({}, plainInputStyle, { flex: 1 })} />
+            <select value={newWorkoutTab} onChange={function (e) { setNewWorkoutTab(e.target.value); }} style={Object.assign({}, plainInputStyle, { width: 60, padding: "10px 4px" })}>
+              {TABS.map(function (t) { return <option key={t} value={t}>{t}</option>; })}
+            </select>
           </div>
-          <input type="text" placeholder="URL da imagem/GIF (opcional)" value={newImage} onChange={function (e) { setNewImage(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 10 })} />
+          <input type="text" placeholder="URL da foto 1" value={newImage} onChange={function (e) { setNewImage(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })} />
+          <input type="text" placeholder="URL da foto 2 (opcional)" value={newImage2} onChange={function (e) { setNewImage2(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })} />
+          <textarea placeholder="Observacoes Tecnicas" value={newNotes} onChange={function (e) { setNewNotes(e.target.value); }} style={Object.assign({}, textareaStyle, { marginBottom: 10 })} />
+
           <button onClick={addExercise} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: C.blue, border: "none", borderRadius: 8, color: C.white, fontSize: 13, fontWeight: 700, padding: "10px 0", cursor: "pointer" }}>
-            <Plus size={15} /> Adicionar
+            <Plus size={15} /> Adicionar a {DAY_FULL_LABEL[day]}
           </button>
         </div>
       </div>
@@ -1295,11 +1528,7 @@ export default function App() {
     content = <AlunoDashboard student={currentProfile} onExit={logout} />;
   } else {
     content = (
-      <ProfessorPanel
-        selectedStudent={teacherStudent}
-        onChangeStudent={setTeacherStudent}
-        onExit={logout}
-      />
+      <ProfessorPanel selectedStudent={teacherStudent} onChangeStudent={setTeacherStudent} onExit={logout} />
     );
   }
 
