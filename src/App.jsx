@@ -3,6 +3,7 @@ import {
   Check,
   LogOut,
   ChevronRight,
+  ChevronLeft,
   Image as ImageIcon,
   Flame,
   Plus,
@@ -22,6 +23,10 @@ import {
   BookOpen,
   Play,
   Lock as LockIcon,
+  CalendarCheck2,
+  CalendarPlus,
+  CalendarDays,
+  TrendingUp,
 } from "lucide-react";
 import { supabase } from "./supabaseClient.js";
 
@@ -69,6 +74,8 @@ var C = {
   blueDeep: "#123a5c",
   white: "#f3f5f7",
   danger: "#c65a5a",
+  historyBlue: "#5c8aa3",
+  success: "#3fae6a",
 };
 
 var inputStyle = {
@@ -127,6 +134,13 @@ function stripTime(d) {
   return copy;
 }
 
+function toDateOnlyString(d) {
+  var y = d.getFullYear();
+  var m = String(d.getMonth() + 1).padStart(2, "0");
+  var day = String(d.getDate()).padStart(2, "0");
+  return y + "-" + m + "-" + day;
+}
+
 function getMondayOfWeek(date) {
   var d = new Date(date);
   var day = d.getDay();
@@ -147,6 +161,56 @@ function buildWeekDays(referenceDate) {
   return days;
 }
 
+// Grid de calendario mensal, sempre comecando na segunda-feira.
+// Gera 5 ou 6 semanas dependendo de onde o mes cai (nunca corta dias).
+function buildMonthCells(baseDate) {
+  var year = baseDate.getFullYear();
+  var month = baseDate.getMonth();
+  var firstOfMonth = new Date(year, month, 1);
+  var startDay = firstOfMonth.getDay();
+  var mondayOffset = startDay === 0 ? 6 : startDay - 1;
+  var gridStart = new Date(year, month, 1 - mondayOffset);
+
+  var lastOfMonth = new Date(year, month + 1, 0);
+  var daysInMonth = lastOfMonth.getDate();
+  var totalCellsNeeded = mondayOffset + daysInMonth;
+  var totalWeeks = Math.ceil(totalCellsNeeded / 7);
+
+  var cells = [];
+  for (var i = 0; i < totalWeeks * 7; i++) {
+    var d = new Date(gridStart);
+    d.setDate(gridStart.getDate() + i);
+    cells.push(d);
+  }
+  return cells;
+}
+
+function findHistoryForDate(records, date) {
+  for (var j = 0; j < records.length; j++) {
+    if (isSameDate(new Date(records[j].created_at), date)) return records[j];
+  }
+  return null;
+}
+
+// Busca a carga anterior (mais recente antes de beforeDate) do mesmo exercicio
+// pelo nome, para deteccao de evolucao.
+function getPreviousWeight(historyRecords, exerciseName, beforeDate) {
+  var candidates = historyRecords
+    .filter(function (r) { return new Date(r.created_at).getTime() < beforeDate.getTime() && r.summary_data; })
+    .sort(function (a, b) { return new Date(b.created_at) - new Date(a.created_at); });
+
+  for (var i = 0; i < candidates.length; i++) {
+    var items = candidates[i].summary_data;
+    for (var j = 0; j < items.length; j++) {
+      if (items[j].name === exerciseName && items[j].weight) {
+        var parsed = parseFloat(String(items[j].weight).replace(",", "."));
+        if (!isNaN(parsed)) return parsed;
+      }
+    }
+  }
+  return null;
+}
+
 function formatFriendlyDate(input) {
   var d = typeof input === "string" ? new Date(input) : input;
   var raw = d.toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" });
@@ -157,6 +221,11 @@ function formatFriendlyDate(input) {
   var weekdayCap = weekday.charAt(0).toUpperCase() + weekday.slice(1);
   var restCap = rest.replace(/de (\p{L})/u, function (m, c) { return "de " + c.toUpperCase(); });
   return weekdayCap + ", " + restCap;
+}
+
+function formatMonthLabel(d) {
+  var raw = d.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+  return raw.charAt(0).toUpperCase() + raw.slice(1);
 }
 
 function formatTime(input) {
@@ -531,6 +600,7 @@ function WeekCircleRow(props) {
   return (
     <div style={{ display: "flex", justifyContent: "space-between", gap: 6, marginBottom: 8 }}>
       {props.items.map(function (item) {
+        var fillColor = item.highlightColor || C.blue;
         return (
           <button
             key={item.key}
@@ -542,8 +612,8 @@ function WeekCircleRow(props) {
               style={{
                 width: 32, height: 32, borderRadius: "50%",
                 display: "flex", alignItems: "center", justifyContent: "center",
-                background: item.highlighted ? C.blue : C.panelAlt,
-                border: "2px solid " + (item.ringActive ? C.blue : C.border),
+                background: item.highlighted ? fillColor : C.panelAlt,
+                border: "2px solid " + (item.ringActive ? fillColor : C.border),
                 color: item.highlighted ? C.white : C.silverDim,
                 fontSize: 11, fontWeight: 700,
               }}
@@ -557,6 +627,8 @@ function WeekCircleRow(props) {
   );
 }
 
+// Resumo de um dia (usado tanto na fileira semanal quanto no calendario mensal).
+// Se withProgress, compara cada carga com a ocorrencia anterior do mesmo exercicio.
 function HistorySummaryBlock(props) {
   if (!props.record) {
     return (
@@ -566,11 +638,14 @@ function HistorySummaryBlock(props) {
     );
   }
   var record = props.record;
+  var allRecords = props.allRecords || [];
+  var recordDate = new Date(record.created_at);
+
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "center", gap: 12, background: C.panel, border: "1px solid " + C.blueDim, borderRadius: 12, padding: 14, marginBottom: record.summary_data ? 10 : 0 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, background: C.panel, border: "1px solid " + C.historyBlue, borderRadius: 12, padding: 14, marginBottom: record.summary_data ? 10 : 0 }}>
         <div style={{ width: 42, height: 42, borderRadius: "50%", background: C.blueDeep, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-          <Flame size={18} color={C.blue} />
+          <Flame size={18} color={C.historyBlue} />
         </div>
         <p style={{ color: C.white, fontSize: 13.5, margin: 0 }}>
           Treino <b>{record.workout_tab}</b> concluido as <b>{formatTime(record.created_at)}</b>
@@ -580,16 +655,130 @@ function HistorySummaryBlock(props) {
       {record.summary_data && record.summary_data.length > 0 ? (
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           {record.summary_data.map(function (item, idx) {
+            var showEvolution = false;
+            if (props.withProgress && item.weight) {
+              var currentWeight = parseFloat(String(item.weight).replace(",", "."));
+              var previousWeight = getPreviousWeight(allRecords, item.name, recordDate);
+              if (!isNaN(currentWeight) && previousWeight !== null && currentWeight > previousWeight) {
+                showEvolution = true;
+              }
+            }
             return (
-              <div key={idx} style={{ display: "flex", justifyContent: "space-between", background: C.panel, border: "1px solid " + C.border, borderRadius: 8, padding: "8px 10px" }}>
-                <span style={{ color: C.white, fontSize: 12.5 }}>{item.name}</span>
-                <span style={{ color: C.silverDim, fontSize: 12 }}>{item.weight ? item.weight + "kg" : "-"}</span>
+              <div key={idx} style={{ background: C.panel, border: "1px solid " + (showEvolution ? C.success : C.border), borderRadius: 8, padding: "8px 10px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <span style={{ color: C.white, fontSize: 12.5 }}>{item.name}</span>
+                  <span style={{ color: C.silverDim, fontSize: 12 }}>{item.weight ? item.weight + "kg" : "-"}</span>
+                </div>
+                {showEvolution ? (
+                  <p style={{ color: C.success, fontSize: 11.5, fontWeight: 700, margin: "4px 0 0" }}>
+                    🔥 Evolucao! Voce aumentou a carga neste aparelho
+                  </p>
+                ) : null}
               </div>
             );
           })}
         </div>
       ) : null}
     </div>
+  );
+}
+
+// Tela de Historico Mensal: grid de calendario do mes, dias com treino
+// destacados, clique abre o resumo com deteccao de evolucao de carga.
+// Usada tanto pelo Aluno (proprio historico) quanto pelo Professor
+// (historico de qualquer aluno selecionado).
+function MonthlyHistoryScreen(props) {
+  var stateMonth = useState(function () { var d = new Date(); d.setDate(1); return d; });
+  var monthDate = stateMonth[0]; var setMonthDate = stateMonth[1];
+  var stateSelectedDay = useState(null); var selectedDay = stateSelectedDay[0]; var setSelectedDay = stateSelectedDay[1];
+
+  var today = new Date();
+  var cells = buildMonthCells(monthDate);
+  var weeks = [];
+  for (var i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
+
+  function goPrevMonth() {
+    var d = new Date(monthDate);
+    d.setMonth(d.getMonth() - 1);
+    setMonthDate(d);
+    setSelectedDay(null);
+  }
+  function goNextMonth() {
+    var d = new Date(monthDate);
+    d.setMonth(d.getMonth() + 1);
+    setMonthDate(d);
+    setSelectedDay(null);
+  }
+
+  var selectedRecord = selectedDay ? findHistoryForDate(props.historyRecords, selectedDay) : null;
+
+  return (
+    <PageContainer>
+      <TopBrandBar />
+      <button onClick={props.onClose} style={{ display: "flex", alignItems: "center", gap: 6, background: "transparent", border: "none", color: C.silverDim, fontSize: 13, cursor: "pointer", marginBottom: 12 }}>
+        <ArrowLeft size={15} /> Voltar
+      </button>
+
+      <p style={{ color: C.white, fontSize: 17, fontWeight: 800, margin: "0 0 4px" }}>Historico Completo</p>
+      <p style={{ color: C.silverDim, fontSize: 12.5, margin: "0 0 18px" }}>{props.studentName}</p>
+
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+        <button onClick={goPrevMonth} aria-label="Mes anterior" style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid " + C.border, background: C.panel, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+          <ChevronLeft size={16} color={C.silverDim} />
+        </button>
+        <p style={{ color: C.white, fontSize: 14.5, fontWeight: 700, margin: 0 }}>{formatMonthLabel(monthDate)}</p>
+        <button onClick={goNextMonth} aria-label="Proximo mes" style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid " + C.border, background: C.panel, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+          <ChevronRight size={16} color={C.silverDim} />
+        </button>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4, marginBottom: 6 }}>
+        {DAY_TABS.map(function (d) {
+          return <div key={d.key} style={{ textAlign: "center", color: C.silverDim, fontSize: 10, fontWeight: 700 }}>{d.label}</div>;
+        })}
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 18 }}>
+        {weeks.map(function (week, wi) {
+          return (
+            <div key={wi} style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}>
+              {week.map(function (d, di) {
+                var inMonth = d.getMonth() === monthDate.getMonth();
+                var hasRecord = !!findHistoryForDate(props.historyRecords, d);
+                var isToday = isSameDate(d, today);
+                var isSelected = selectedDay && isSameDate(d, selectedDay);
+                return (
+                  <button
+                    key={di}
+                    onClick={function () { setSelectedDay(d); }}
+                    style={{
+                      aspectRatio: "1", borderRadius: 8,
+                      background: hasRecord ? C.blue : C.panelAlt,
+                      border: "2px solid " + (isSelected ? C.white : (isToday ? C.blue : C.border)),
+                      color: inMonth ? (hasRecord ? C.white : C.silverDim) : "#4a5563",
+                      fontSize: 11.5, fontWeight: 700,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      cursor: "pointer", opacity: inMonth ? 1 : 0.45,
+                    }}
+                  >
+                    {d.getDate()}
+                  </button>
+                );
+              })}
+            </div>
+          );
+        })}
+      </div>
+
+      {selectedDay ? (
+        <div>
+          <p style={{ color: C.silverDim, fontSize: 12, margin: "0 0 10px" }}>{formatFriendlyDate(selectedDay)}</p>
+          <HistorySummaryBlock record={selectedRecord} allRecords={props.historyRecords} withProgress />
+        </div>
+      ) : (
+        <p style={{ color: C.silverDim, fontSize: 12.5, textAlign: "center", padding: "10px 0" }}>Toque em um dia para ver o resumo do treino.</p>
+      )}
+    </PageContainer>
   );
 }
 
@@ -740,8 +929,8 @@ function MissionAccomplishedScreen(props) {
   );
 }
 
-// Painel do aluno. O estado "Iniciado" agora vive em profiles.workout_started_at,
-// entao sobrevive a reload de pagina e troca de aba/app.
+// Painel do aluno. Tela principal so mostra a fileira semanal + botao para
+// abrir o Historico Completo (calendario mensal) em tela separada.
 function AlunoDashboard(props) {
   var student = props.student;
   var weekDays = buildWeekDays(new Date());
@@ -757,8 +946,8 @@ function AlunoDashboard(props) {
   var stateForceView = useState(false); var forceView = stateForceView[0]; var setForceView = stateForceView[1];
   var stateDetailEx = useState(null); var detailEx = stateDetailEx[0]; var setDetailEx = stateDetailEx[1];
   var stateStarting = useState(false); var starting = stateStarting[0]; var setStarting = stateStarting[1];
+  var stateShowMonthly = useState(false); var showMonthly = stateShowMonthly[0]; var setShowMonthly = stateShowMonthly[1];
 
-  // workout_started_at persistido no perfil -- sobrevive a reload da pagina.
   var stateStartedAt = useState(student.workout_started_at || null);
   var startedAt = stateStartedAt[0]; var setStartedAt = stateStartedAt[1];
 
@@ -792,6 +981,16 @@ function AlunoDashboard(props) {
     return function () { cancelled = true; };
   }, [student.id]);
 
+  if (showMonthly) {
+    return (
+      <MonthlyHistoryScreen
+        studentName={student.name}
+        historyRecords={historyRecords}
+        onClose={function () { setShowMonthly(false); }}
+      />
+    );
+  }
+
   function selectDate(d) {
     setSelectedDate(d);
     setForceView(false);
@@ -803,17 +1002,8 @@ function AlunoDashboard(props) {
 
   var plannedList = allExercises.filter(function (e) { return e.scheduled_day === selectedDayKey; });
 
-  function findHistoryForDate(d) {
-    for (var j = 0; j < historyRecords.length; j++) {
-      if (isSameDate(new Date(historyRecords[j].created_at), d)) return historyRecords[j];
-    }
-    return null;
-  }
-  var historyForSelectedDate = findHistoryForDate(selectedDate);
+  var historyForSelectedDate = findHistoryForDate(historyRecords, selectedDate);
 
-  // Logica inteligente: o treino de hoje ja abre "Interativo" (sem botao
-  // Iniciar) se workout_started_at for de hoje OU se ja existe pelo menos
-  // um exercicio de hoje marcado como concluido.
   var startedAtIsToday = startedAt ? isSameDate(new Date(startedAt), today) : false;
   var hasAnyCompletedToday = plannedList.some(function (e) { return !!e.is_completed; });
   var isInteractive = isToday && (startedAtIsToday || hasAnyCompletedToday);
@@ -848,7 +1038,6 @@ function AlunoDashboard(props) {
     });
   }
 
-  // Grava workout_started_at = agora no perfil do aluno.
   async function startWorkout() {
     setStarting(true);
     var nowIso = new Date().toISOString();
@@ -865,7 +1054,6 @@ function AlunoDashboard(props) {
     await fetchExercises();
   }
 
-  // Zera workout_started_at no perfil, preparando o dia seguinte.
   async function resetStartedFlag() {
     var result = await supabase.from("profiles").update({ workout_started_at: null }).eq("id", student.id).select();
     if (!result.error) {
@@ -874,6 +1062,7 @@ function AlunoDashboard(props) {
   }
 
   async function finishWorkout() {
+    if (finishing) return;
     setFinishing(true);
     setFinishError("");
 
@@ -890,20 +1079,21 @@ function AlunoDashboard(props) {
       };
     });
 
-    var existing = findHistoryForDate(today);
-    var writeResult;
-    if (existing) {
-      writeResult = await supabase
-        .from("workout_history")
-        .update({ workout_tab: mainTab, summary_data: snapshot, created_at: new Date().toISOString() })
-        .eq("id", existing.id)
-        .select();
-    } else {
-      writeResult = await supabase
-        .from("workout_history")
-        .insert([{ student_id: student.id, workout_tab: mainTab, summary_data: snapshot }])
-        .select();
-    }
+    var todayDateStr = toDateOnlyString(today);
+
+    var writeResult = await supabase
+      .from("workout_history")
+      .upsert(
+        [{
+          student_id: student.id,
+          workout_date: todayDateStr,
+          workout_tab: mainTab,
+          summary_data: snapshot,
+          created_at: new Date().toISOString(),
+        }],
+        { onConflict: "student_id,workout_date" }
+      )
+      .select();
 
     setFinishing(false);
 
@@ -931,7 +1121,7 @@ function AlunoDashboard(props) {
   for (var j = 0; j < plannedList.length; j++) { if (plannedList[j].is_completed) doneCount++; }
 
   var weekCircleItems = weekDays.map(function (d, i) {
-    var hasHist = !!findHistoryForDate(d);
+    var hasHist = !!findHistoryForDate(historyRecords, d);
     return {
       key: DAY_TABS[i].key,
       topLabel: DAY_TABS[i].label,
@@ -963,9 +1153,17 @@ function AlunoDashboard(props) {
       </div>
 
       <div style={{ paddingTop: 20, marginBottom: 6 }}>
-        <p style={{ color: C.silverDim, fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10 }}>
-          Minha Semana
-        </p>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+          <p style={{ color: C.silverDim, fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, margin: 0 }}>
+            Minha Semana
+          </p>
+          <button
+            onClick={function () { setShowMonthly(true); }}
+            style={{ display: "flex", alignItems: "center", gap: 5, background: "transparent", border: "none", color: C.blue, fontSize: 11.5, fontWeight: 700, cursor: "pointer", padding: 0 }}
+          >
+            <CalendarDays size={13} /> Ver Historico Completo
+          </button>
+        </div>
         <WeekCircleRow items={weekCircleItems} />
       </div>
 
@@ -983,7 +1181,7 @@ function AlunoDashboard(props) {
           onViewExercises={function () { setForceView(true); }}
         />
       ) : isPast ? (
-        <HistorySummaryBlock record={historyForSelectedDate} />
+        <HistorySummaryBlock record={historyForSelectedDate} allRecords={historyRecords} withProgress />
       ) : (
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
@@ -1153,11 +1351,11 @@ function RecentHistoryList(props) {
   return (
     <div style={{ marginBottom: 18 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
-        <History size={14} color={C.blue} />
+        <History size={14} color={C.historyBlue} />
         <p style={{ color: C.silverDim, fontSize: 11.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, margin: 0 }}>Ultimos Treinos Concluidos</p>
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-        {props.records.map(function (r) {
+        {props.records.slice(0, 5).map(function (r) {
           return (
             <div key={r.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: C.panel, border: "1px solid " + C.border, borderRadius: 8, padding: "8px 10px" }}>
               <span style={{ color: C.white, fontSize: 12.5, fontWeight: 700 }}>Treino {r.workout_tab}</span>
@@ -1261,20 +1459,45 @@ function LibraryManager(props) {
   );
 }
 
+function CalendarLegend() {
+  return (
+    <div style={{ display: "flex", gap: 16, marginBottom: 14 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <div style={{ width: 12, height: 12, borderRadius: "50%", background: C.historyBlue }} />
+        <span style={{ color: C.silverDim, fontSize: 11 }}>Historico (passado)</span>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <div style={{ width: 12, height: 12, borderRadius: "50%", background: C.blue }} />
+        <span style={{ color: C.silverDim, fontSize: 11 }}>Planejamento (hoje/futuro)</span>
+      </div>
+    </div>
+  );
+}
+
+// Painel do professor: calendario semanal identico ao do aluno, com botao
+// para abrir o Calendario Mensal completo do aluno selecionado.
 function ProfessorPanel(props) {
   var stateMode = useState("students"); var mode = stateMode[0]; var setMode = stateMode[1];
   var stateStudents = useState([]); var students = stateStudents[0]; var setStudents = stateStudents[1];
   var stateLoadingStudents = useState(true); var loadingStudents = stateLoadingStudents[0]; var setLoadingStudents = stateLoadingStudents[1];
 
   var stateSelected = useState(null); var selectedStudent = stateSelected[0]; var setSelectedStudent = stateSelected[1];
-  var stateDay = useState(DAY_TABS[0].key); var day = stateDay[0]; var setDay = stateDay[1];
   var stateAllExercises = useState([]); var allExercises = stateAllExercises[0]; var setAllExercises = stateAllExercises[1];
   var stateLoadingWorkout = useState(false); var loadingWorkout = stateLoadingWorkout[0]; var setLoadingWorkout = stateLoadingWorkout[1];
 
   var stateHistoryRecords = useState([]); var historyRecords = stateHistoryRecords[0]; var setHistoryRecords = stateHistoryRecords[1];
   var stateLoadingHistory = useState(false); var loadingHistory = stateLoadingHistory[0]; var setLoadingHistory = stateLoadingHistory[1];
+  var stateShowMonthly = useState(false); var showMonthly = stateShowMonthly[0]; var setShowMonthly = stateShowMonthly[1];
 
   var stateLibrary = useState([]); var library = stateLibrary[0]; var setLibrary = stateLibrary[1];
+
+  var weekDays = buildWeekDays(new Date());
+  var today = new Date();
+  var stateSelectedDate = useState(function () {
+    for (var i = 0; i < weekDays.length; i++) { if (isSameDate(weekDays[i], today)) return weekDays[i]; }
+    return weekDays[0];
+  });
+  var selectedDate = stateSelectedDate[0]; var setSelectedDate = stateSelectedDate[1];
 
   var stateLibrarySelectId = useState(""); var librarySelectId = stateLibrarySelectId[0]; var setLibrarySelectId = stateLibrarySelectId[1];
   var stateName = useState(""); var newName = stateName[0]; var setNewName = stateName[1];
@@ -1328,7 +1551,7 @@ function ProfessorPanel(props) {
       setLoadingHistory(true);
 
       var exercisesResult = await supabase.from("exercises").select("*").eq("student_id", selectedStudent.id).order("created_at", { ascending: true });
-      var historyResult = await supabase.from("workout_history").select("*").eq("student_id", selectedStudent.id).order("created_at", { ascending: false }).limit(5);
+      var historyResult = await supabase.from("workout_history").select("*").eq("student_id", selectedStudent.id).order("created_at", { ascending: false });
 
       if (!cancelled) {
         if (!exercisesResult.error && exercisesResult.data) setAllExercises(exercisesResult.data);
@@ -1350,7 +1573,13 @@ function ProfessorPanel(props) {
     return (
       <StudentPicker
         title={loadingStudents ? "Carregando alunos..." : "Selecione o aluno para planejar o treino"}
-        onPick={setSelectedStudent}
+        onPick={function (s) {
+          setSelectedStudent(s);
+          setSelectedDate(function () {
+            for (var i = 0; i < weekDays.length; i++) { if (isSameDate(weekDays[i], today)) return weekDays[i]; }
+            return weekDays[0];
+          }());
+        }}
         onBack={props.onExit}
         onOpenLibrary={function () { setMode("library"); }}
         students={students}
@@ -1358,18 +1587,42 @@ function ProfessorPanel(props) {
     );
   }
 
-  var byDay = groupByDay(allExercises);
-  var list = byDay[day];
+  if (showMonthly) {
+    return (
+      <MonthlyHistoryScreen
+        studentName={selectedStudent.name}
+        historyRecords={historyRecords}
+        onClose={function () { setShowMonthly(false); }}
+      />
+    );
+  }
 
-  var weekCircleItems = DAY_TABS.map(function (d) {
-    var count = byDay[d.key] ? byDay[d.key].length : 0;
+  var isPastSelected = stripTime(selectedDate).getTime() < stripTime(today).getTime();
+  var selectedDayKey = getDayKeyForDate(selectedDate);
+  var byDay = groupByDay(allExercises);
+  var list = byDay[selectedDayKey];
+  var historyForSelectedDate = findHistoryForDate(historyRecords, selectedDate);
+
+  var weekCircleItems = weekDays.map(function (d, i) {
+    var isPastDay = stripTime(d).getTime() < stripTime(today).getTime();
+    var dayKey = getDayKeyForDate(d);
+    var highlighted, color;
+    if (isPastDay) {
+      highlighted = !!findHistoryForDate(historyRecords, d);
+      color = C.historyBlue;
+    } else {
+      var count = byDay[dayKey] ? byDay[dayKey].length : 0;
+      highlighted = count > 0;
+      color = C.blue;
+    }
     return {
-      key: d.key,
-      topLabel: d.label,
-      circleText: count > 0 ? String(count) : "-",
-      highlighted: count > 0,
-      ringActive: d.key === day,
-      onClick: function () { setDay(d.key); },
+      key: DAY_TABS[i].key,
+      topLabel: DAY_TABS[i].label,
+      circleText: d.getDate(),
+      highlighted: highlighted,
+      highlightColor: color,
+      ringActive: isSameDate(d, selectedDate),
+      onClick: function () { setSelectedDate(d); },
     };
   });
 
@@ -1389,7 +1642,7 @@ function ProfessorPanel(props) {
     var payload = {
       student_id: selectedStudent.id,
       workout_tab: newWorkoutTab,
-      scheduled_day: day,
+      scheduled_day: selectedDayKey,
       name: newName.trim(),
       sets: Number(newSets) || 1,
       reps: newReps.trim() || "-",
@@ -1440,63 +1693,94 @@ function ProfessorPanel(props) {
       <div style={{ paddingTop: 12, display: "flex", alignItems: "center", gap: 10 }}>
         <Avatar name={selectedStudent.name} size={38} />
         <div>
-          <p style={{ color: C.white, fontSize: 15, fontWeight: 800, margin: 0 }}>Planejamento de {selectedStudent.name.split(" ")[0]}</p>
+          <p style={{ color: C.white, fontSize: 15, fontWeight: 800, margin: 0 }}>{selectedStudent.name.split(" ")[0]}</p>
           <p style={{ color: C.silverDim, fontSize: 11.5, margin: 0 }}>Painel do professor - {selectedStudent.phone}</p>
         </div>
       </div>
 
-      <p style={{ color: C.silverDim, fontSize: 11.5, margin: "8px 0 16px" }}>{formatFriendlyDate(new Date())}</p>
-
       <RecentHistoryList records={historyRecords} loading={loadingHistory} />
 
-      <p style={{ color: C.silverDim, fontSize: 11.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>
-        Planejamento Semanal <span style={{ opacity: 0.7 }}>(numero = qtd. de exercicios)</span>
-      </p>
-      <WeekCircleRow items={weekCircleItems} />
-
-      <div style={{ paddingTop: 12 }}>
-        {loadingWorkout ? (
-          <p style={{ color: C.silverDim, fontSize: 13, textAlign: "center", padding: "12px 0" }}>Carregando exercicios...</p>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
-            {list.length === 0 ? (
-              <p style={{ color: C.silverDim, fontSize: 13, textAlign: "center", padding: "12px 0" }}>Nenhum exercicio agendado para {DAY_FULL_LABEL[day]}. Adicione abaixo.</p>
-            ) : null}
-            {list.map(function (ex) {
-              return (
-                <ProfessorExerciseRow key={ex.id} ex={ex} onSave={saveEditExercise} onDelete={deleteExercise} />
-              );
-            })}
-          </div>
-        )}
-
-        <div style={{ background: C.panelAlt, border: "1px solid " + C.border, borderRadius: 12, padding: 12 }}>
-          <p style={{ color: C.silverDim, fontSize: 11.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, margin: "0 0 8px" }}>
-            Adicionar exercicio para {DAY_FULL_LABEL[day]}
+      <div style={{ paddingTop: 4, marginBottom: 6 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+          <p style={{ color: C.silverDim, fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, margin: 0 }}>
+            Semana do Aluno
           </p>
-
-          <select value={librarySelectId} onChange={function (e) { handleLibrarySelect(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })}>
-            <option value="">Selecionar da Biblioteca (opcional)</option>
-            {library.map(function (it) { return <option key={it.id} value={it.id}>{it.name}</option>; })}
-          </select>
-
-          <input type="text" placeholder="Nome do exercicio" value={newName} onChange={function (e) { setNewName(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })} />
-          <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-            <input type="number" placeholder="Series" value={newSets} onChange={function (e) { setNewSets(e.target.value); }} style={Object.assign({}, plainInputStyle, { width: 70 })} />
-            <input type="text" placeholder="Repeticoes (ex: 10-12)" value={newReps} onChange={function (e) { setNewReps(e.target.value); }} style={Object.assign({}, plainInputStyle, { flex: 1 })} />
-            <select value={newWorkoutTab} onChange={function (e) { setNewWorkoutTab(e.target.value); }} style={Object.assign({}, plainInputStyle, { width: 60, padding: "10px 4px" })}>
-              {TABS.map(function (t) { return <option key={t} value={t}>{t}</option>; })}
-            </select>
-          </div>
-          <input type="text" placeholder="URL da foto 1" value={newImage} onChange={function (e) { setNewImage(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })} />
-          <input type="text" placeholder="URL da foto 2 (opcional)" value={newImage2} onChange={function (e) { setNewImage2(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })} />
-          <textarea placeholder="Observacoes Tecnicas" value={newNotes} onChange={function (e) { setNewNotes(e.target.value); }} style={Object.assign({}, textareaStyle, { marginBottom: 10 })} />
-
-          <button onClick={addExercise} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: C.blue, border: "none", borderRadius: 8, color: C.white, fontSize: 13, fontWeight: 700, padding: "10px 0", cursor: "pointer" }}>
-            <Plus size={15} /> Adicionar a {DAY_FULL_LABEL[day]}
+          <button
+            onClick={function () { setShowMonthly(true); }}
+            style={{ display: "flex", alignItems: "center", gap: 5, background: "transparent", border: "none", color: C.blue, fontSize: 11.5, fontWeight: 700, cursor: "pointer", padding: 0 }}
+          >
+            <TrendingUp size={13} /> Calendario Mensal
           </button>
         </div>
+        <WeekCircleRow items={weekCircleItems} />
       </div>
+
+      <CalendarLegend />
+
+      <p style={{ color: C.silverDim, fontSize: 12, margin: "0 0 14px" }}>
+        {formatFriendlyDate(selectedDate)}
+      </p>
+
+      {isPastSelected ? (
+        <div>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
+            <CalendarCheck2 size={15} color={C.historyBlue} />
+            <p style={{ color: C.historyBlue, fontSize: 12.5, fontWeight: 700, margin: 0, textTransform: "uppercase", letterSpacing: 0.5 }}>Historico</p>
+          </div>
+          <HistorySummaryBlock record={historyForSelectedDate} allRecords={historyRecords} withProgress />
+        </div>
+      ) : (
+        <div>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
+            <CalendarPlus size={15} color={C.blue} />
+            <p style={{ color: C.blue, fontSize: 12.5, fontWeight: 700, margin: 0, textTransform: "uppercase", letterSpacing: 0.5 }}>
+              Planejamento - {DAY_FULL_LABEL[selectedDayKey]}
+            </p>
+          </div>
+
+          {loadingWorkout ? (
+            <p style={{ color: C.silverDim, fontSize: 13, textAlign: "center", padding: "12px 0" }}>Carregando exercicios...</p>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
+              {list.length === 0 ? (
+                <p style={{ color: C.silverDim, fontSize: 13, textAlign: "center", padding: "12px 0" }}>Nenhum exercicio agendado para {DAY_FULL_LABEL[selectedDayKey]}. Adicione abaixo.</p>
+              ) : null}
+              {list.map(function (ex) {
+                return (
+                  <ProfessorExerciseRow key={ex.id} ex={ex} onSave={saveEditExercise} onDelete={deleteExercise} />
+                );
+              })}
+            </div>
+          )}
+
+          <div style={{ background: C.panelAlt, border: "1px solid " + C.border, borderRadius: 12, padding: 12 }}>
+            <p style={{ color: C.silverDim, fontSize: 11.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, margin: "0 0 8px" }}>
+              Adicionar exercicio para {DAY_FULL_LABEL[selectedDayKey]}
+            </p>
+
+            <select value={librarySelectId} onChange={function (e) { handleLibrarySelect(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })}>
+              <option value="">Selecionar da Biblioteca (opcional)</option>
+              {library.map(function (it) { return <option key={it.id} value={it.id}>{it.name}</option>; })}
+            </select>
+
+            <input type="text" placeholder="Nome do exercicio" value={newName} onChange={function (e) { setNewName(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })} />
+            <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+              <input type="number" placeholder="Series" value={newSets} onChange={function (e) { setNewSets(e.target.value); }} style={Object.assign({}, plainInputStyle, { width: 70 })} />
+              <input type="text" placeholder="Repeticoes (ex: 10-12)" value={newReps} onChange={function (e) { setNewReps(e.target.value); }} style={Object.assign({}, plainInputStyle, { flex: 1 })} />
+              <select value={newWorkoutTab} onChange={function (e) { setNewWorkoutTab(e.target.value); }} style={Object.assign({}, plainInputStyle, { width: 60, padding: "10px 4px" })}>
+                {TABS.map(function (t) { return <option key={t} value={t}>{t}</option>; })}
+              </select>
+            </div>
+            <input type="text" placeholder="URL da foto 1" value={newImage} onChange={function (e) { setNewImage(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })} />
+            <input type="text" placeholder="URL da foto 2 (opcional)" value={newImage2} onChange={function (e) { setNewImage2(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })} />
+            <textarea placeholder="Observacoes Tecnicas" value={newNotes} onChange={function (e) { setNewNotes(e.target.value); }} style={Object.assign({}, textareaStyle, { marginBottom: 10 })} />
+
+            <button onClick={addExercise} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: C.blue, border: "none", borderRadius: 8, color: C.white, fontSize: 13, fontWeight: 700, padding: "10px 0", cursor: "pointer" }}>
+              <Plus size={15} /> Adicionar a {DAY_FULL_LABEL[selectedDayKey]}
+            </button>
+          </div>
+        </div>
+      )}
     </PageContainer>
   );
 }
@@ -1567,3 +1851,4 @@ export default function App() {
     </div>
   );
 }
+export default App;
