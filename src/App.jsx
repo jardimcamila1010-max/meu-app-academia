@@ -15,12 +15,14 @@ import {
   Lock,
   User as UserIcon,
   PartyPopper,
+  History,
 } from "lucide-react";
 import { supabase } from "./supabaseClient.js";
 
 var LOGO_URL = "https://i.postimg.cc/NLQPwFC2/Whats-App-Image-2026-07-14-at-17-04-16.jpg";
 var IMG_GERAL = "https://images.unsplash.com/photo-1583454110551-21f2fa2afe61?w=500&q=80";
 var TABS = ["A", "B", "C"];
+var WEEK_DAY_LABELS = ["S", "T", "Q", "Q", "S", "S", "D"]; // Seg Ter Qua Qui Sex Sab Dom
 
 var C = {
   bg: "#11161d",
@@ -68,21 +70,46 @@ function groupByTab(rows) {
   return grouped;
 }
 
-// Formata um timestamp ISO para "dd/mm HH:MM" e diz se e hoje.
-function formatHistoryDate(isoString) {
-  var d = new Date(isoString);
-  var now = new Date();
-  var isToday =
-    d.getFullYear() === now.getFullYear() &&
-    d.getMonth() === now.getMonth() &&
-    d.getDate() === now.getDate();
+function isSameDate(a, b) {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
 
-  var dd = String(d.getDate()).padStart(2, "0");
-  var mm = String(d.getMonth() + 1).padStart(2, "0");
-  var hh = String(d.getHours()).padStart(2, "0");
-  var min = String(d.getMinutes()).padStart(2, "0");
+// Segunda-feira da semana da data informada (independente do dia atual ser domingo).
+function getMondayOfWeek(date) {
+  var d = new Date(date);
+  var day = d.getDay(); // 0 = domingo ... 6 = sabado
+  var diff = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + diff);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
 
-  return { isToday: isToday, label: dd + "/" + mm + " " + hh + ":" + min };
+function buildWeekDays(referenceDate) {
+  var monday = getMondayOfWeek(referenceDate);
+  var days = [];
+  for (var i = 0; i < 7; i++) {
+    var d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    days.push(d);
+  }
+  return days;
+}
+
+// "sexta-feira, 17 de julho" -> "Sexta-feira, 17 de Julho"
+function formatFriendlyDate(input) {
+  var d = typeof input === "string" ? new Date(input) : input;
+  var raw = d.toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" });
+  var commaIndex = raw.indexOf(",");
+  if (commaIndex === -1) return raw;
+  var weekday = raw.slice(0, commaIndex);
+  var rest = raw.slice(commaIndex + 2);
+  var weekdayCap = weekday.charAt(0).toUpperCase() + weekday.slice(1);
+  var restCap = rest.replace(/de (\p{L})/u, function (m, c) { return "de " + c.toUpperCase(); });
+  return weekdayCap + ", " + restCap;
 }
 
 function IconField(props) {
@@ -372,18 +399,20 @@ function StudentPicker(props) {
         {students.map(function (s) {
           var history = s._lastHistory;
           var historyLabel = null;
+          var isToday = false;
           if (history) {
-            var formatted = formatHistoryDate(history.created_at);
-            historyLabel = formatted.isToday
+            var histDate = new Date(history.created_at);
+            isToday = isSameDate(histDate, new Date());
+            historyLabel = isToday
               ? "Concluiu o Treino " + history.workout_tab + " hoje"
-              : "Ultimo treino: " + formatted.label;
+              : "Ultimo treino: " + formatFriendlyDate(histDate);
           }
           return (
             <button key={s.id} onClick={function () { props.onPick(s); }} style={{ display: "flex", alignItems: "center", gap: 12, background: C.panel, border: "1px solid " + C.border, borderRadius: 12, padding: "12px 14px", cursor: "pointer", textAlign: "left" }}>
               <Avatar name={s.name} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <p style={{ color: C.white, fontSize: 15, fontWeight: 600, margin: 0 }}>{s.name}</p>
-                <p style={{ color: history && formatHistoryDate(history.created_at).isToday ? C.blue : C.silverDim, fontSize: 11.5, margin: "2px 0 0", fontWeight: historyLabel ? 600 : 400 }}>
+                <p style={{ color: isToday ? C.blue : C.silverDim, fontSize: 11.5, margin: "2px 0 0", fontWeight: historyLabel ? 600 : 400 }}>
                   {historyLabel || "Sem treinos concluidos ainda"}
                 </p>
               </div>
@@ -406,6 +435,47 @@ function ProgressBar(props) {
       </div>
       <div style={{ width: "100%", height: 8, background: C.panelAlt, borderRadius: 6, overflow: "hidden", border: "1px solid " + C.border }}>
         <div style={{ width: pct + "%", height: "100%", background: "linear-gradient(90deg, " + C.blueDim + ", " + C.blue + ")", borderRadius: 6, transition: "width 0.3s ease" }} />
+      </div>
+    </div>
+  );
+}
+
+// Secao "Minha Frequencia": mostra a semana atual (Seg a Dom) e destaca
+// em azul os dias em que ha registro na tabela workout_history.
+function WeeklyFrequency(props) {
+  var days = buildWeekDays(new Date());
+  var today = new Date();
+
+  return (
+    <div style={{ marginBottom: 22 }}>
+      <p style={{ color: C.silverDim, fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10 }}>
+        Minha Frequencia
+      </p>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 6 }}>
+        {days.map(function (d, i) {
+          var attended = false;
+          for (var j = 0; j < props.historyDates.length; j++) {
+            if (isSameDate(props.historyDates[j], d)) { attended = true; break; }
+          }
+          var isToday = isSameDate(d, today);
+          return (
+            <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, flex: 1 }}>
+              <span style={{ color: C.silverDim, fontSize: 10.5, fontWeight: 700 }}>{WEEK_DAY_LABELS[i]}</span>
+              <div
+                style={{
+                  width: 30, height: 30, borderRadius: "50%",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  background: attended ? C.blue : C.panelAlt,
+                  border: "1px solid " + (isToday ? C.blue : C.border),
+                  color: attended ? C.white : C.silverDim,
+                  fontSize: 11.5, fontWeight: 700,
+                }}
+              >
+                {d.getDate()}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -454,7 +524,6 @@ function ExerciseCard(props) {
   );
 }
 
-// Modal de resumo exibido ao finalizar o treino do dia.
 function FinishWorkoutModal(props) {
   return (
     <div
@@ -471,9 +540,14 @@ function FinishWorkoutModal(props) {
         <p style={{ color: C.white, fontSize: 16, fontWeight: 800, margin: "0 0 6px" }}>
           Parabens, {props.name}!
         </p>
-        <p style={{ color: C.silverDim, fontSize: 13, margin: "0 0 20px" }}>
+        <p style={{ color: C.silverDim, fontSize: 13, margin: "0 0 16px" }}>
           Treino concluido. 🔥
         </p>
+
+        {props.resetError ? (
+          <p style={{ color: C.danger, fontSize: 12, margin: "0 0 14px" }}>{props.resetError}</p>
+        ) : null}
+
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           <button
             onClick={props.onClearForTomorrow}
@@ -494,8 +568,8 @@ function FinishWorkoutModal(props) {
   );
 }
 
-// Painel do aluno: le/atualiza exercicios (com is_completed persistido) e
-// registra o historico ao finalizar o treino do dia.
+// Painel do aluno: exercicios com is_completed persistido, frequencia semanal
+// e finalizacao de treino com registro em workout_history.
 function AlunoDashboard(props) {
   var student = props.student;
   var stateTab = useState("A"); var tab = stateTab[0]; var setTab = stateTab[1];
@@ -505,6 +579,8 @@ function AlunoDashboard(props) {
   var stateFinishing = useState(false); var finishing = stateFinishing[0]; var setFinishing = stateFinishing[1];
   var stateShowModal = useState(false); var showModal = stateShowModal[0]; var setShowModal = stateShowModal[1];
   var stateClearing = useState(false); var clearing = stateClearing[0]; var setClearing = stateClearing[1];
+  var stateResetError = useState(""); var resetError = stateResetError[0]; var setResetError = stateResetError[1];
+  var stateHistoryDates = useState([]); var historyDates = stateHistoryDates[0]; var setHistoryDates = stateHistoryDates[1];
 
   useEffect(function () {
     var cancelled = false;
@@ -522,7 +598,19 @@ function AlunoDashboard(props) {
     return function () { cancelled = true; };
   }, [student.id]);
 
-  // Marca/desmarca o exercicio e grava is_completed direto no Supabase.
+  // Carrega o historico do proprio aluno para pintar a semana de frequencia.
+  useEffect(function () {
+    var cancelled = false;
+    async function loadHistory() {
+      var result = await supabase.from("workout_history").select("created_at").eq("student_id", student.id);
+      if (!cancelled && !result.error && result.data) {
+        setHistoryDates(result.data.map(function (r) { return new Date(r.created_at); }));
+      }
+    }
+    loadHistory();
+    return function () { cancelled = true; };
+  }, [student.id]);
+
   async function toggle(ex) {
     var newValue = !ex.is_completed;
     setWorkout(function (prev) {
@@ -530,9 +618,9 @@ function AlunoDashboard(props) {
       next[tab] = next[tab].map(function (e) { return e.id === ex.id ? Object.assign({}, e, { is_completed: newValue }) : e; });
       return next;
     });
-    var result = await supabase.from("exercises").update({ is_completed: newValue }).eq("id", ex.id);
-    if (result.error) {
-      // reverte em caso de falha
+    var result = await supabase.from("exercises").update({ is_completed: newValue }).eq("id", ex.id).select();
+    var failed = result.error || !result.data || result.data.length === 0;
+    if (failed) {
       setWorkout(function (prev) {
         var next = Object.assign({}, prev);
         next[tab] = next[tab].map(function (e) { return e.id === ex.id ? Object.assign({}, e, { is_completed: !newValue }) : e; });
@@ -557,26 +645,43 @@ function AlunoDashboard(props) {
     ]);
     setFinishing(false);
     if (!result.error) {
+      setHistoryDates(function (prev) { return prev.concat([new Date()]); });
+      setResetError("");
       setShowModal(true);
     }
   }
 
+  // Zera is_completed do treino atual daquele aluno. Depende da policy de UPDATE
+  // "Aluno atualiza os proprios exercicios" existir no Supabase (ver instrucoes).
   async function clearForTomorrow() {
     setClearing(true);
+    setResetError("");
+
     var result = await supabase
       .from("exercises")
       .update({ is_completed: false })
       .eq("student_id", student.id)
-      .eq("workout_tab", tab);
+      .eq("workout_tab", tab)
+      .select();
+
     setClearing(false);
-    if (!result.error) {
-      setWorkout(function (prev) {
-        var next = Object.assign({}, prev);
-        next[tab] = next[tab].map(function (e) { return Object.assign({}, e, { is_completed: false }); });
-        return next;
-      });
-      setShowModal(false);
+
+    if (result.error) {
+      setResetError("Erro ao limpar: " + result.error.message);
+      return;
     }
+
+    if (!result.data || result.data.length === 0) {
+      setResetError("Nada foi atualizado. Confirme se a policy de UPDATE para o aluno existe na tabela exercises.");
+      return;
+    }
+
+    setWorkout(function (prev) {
+      var next = Object.assign({}, prev);
+      next[tab] = next[tab].map(function (e) { return Object.assign({}, e, { is_completed: false }); });
+      return next;
+    });
+    setShowModal(false);
   }
 
   var list = workout[tab];
@@ -603,7 +708,15 @@ function AlunoDashboard(props) {
         </button>
       </div>
 
-      <div style={{ paddingTop: 18, display: "flex", gap: 8 }}>
+      <div style={{ paddingTop: 20 }}>
+        <WeeklyFrequency historyDates={historyDates} />
+      </div>
+
+      <p style={{ color: C.silverDim, fontSize: 12, margin: "0 0 14px" }}>
+        {formatFriendlyDate(new Date())}
+      </p>
+
+      <div style={{ display: "flex", gap: 8 }}>
         {TABS.map(function (k) {
           var active = k === tab;
           return (
@@ -665,6 +778,7 @@ function AlunoDashboard(props) {
         <FinishWorkoutModal
           name={student.name.split(" ")[0]}
           clearing={clearing}
+          resetError={resetError}
           onClearForTomorrow={clearForTomorrow}
           onClose={function () { setShowModal(false); }}
         />
@@ -740,9 +854,37 @@ function ProfessorExerciseRow(props) {
   );
 }
 
-// Painel do professor. Ao carregar a lista de alunos, tambem busca o
-// historico de treinos (workout_history) e anexa o mais recente de cada um
-// em s._lastHistory, exibido pelo StudentPicker.
+// Lista "Ultimos Treinos Concluidos" exibida no painel do professor
+// apos selecionar um aluno especifico.
+function RecentHistoryList(props) {
+  if (props.loading) {
+    return <p style={{ color: C.silverDim, fontSize: 12.5, margin: "0 0 16px" }}>Carregando historico...</p>;
+  }
+  if (props.records.length === 0) {
+    return <p style={{ color: C.silverDim, fontSize: 12.5, margin: "0 0 16px" }}>Nenhum treino concluido ainda.</p>;
+  }
+  return (
+    <div style={{ marginBottom: 18 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+        <History size={14} color={C.blue} />
+        <p style={{ color: C.silverDim, fontSize: 11.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, margin: 0 }}>
+          Ultimos Treinos Concluidos
+        </p>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {props.records.map(function (r) {
+          return (
+            <div key={r.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: C.panel, border: "1px solid " + C.border, borderRadius: 8, padding: "8px 10px" }}>
+              <span style={{ color: C.white, fontSize: 12.5, fontWeight: 700 }}>Treino {r.workout_tab}</span>
+              <span style={{ color: C.silverDim, fontSize: 11.5 }}>{formatFriendlyDate(r.created_at)}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function ProfessorPanel(props) {
   var stateStudents = useState([]); var students = stateStudents[0]; var setStudents = stateStudents[1];
   var stateLoadingStudents = useState(true); var loadingStudents = stateLoadingStudents[0]; var setLoadingStudents = stateLoadingStudents[1];
@@ -751,6 +893,9 @@ function ProfessorPanel(props) {
   var stateTab = useState("A"); var tab = stateTab[0]; var setTab = stateTab[1];
   var stateWorkout = useState({ A: [], B: [], C: [] }); var workout = stateWorkout[0]; var setWorkout = stateWorkout[1];
   var stateLoadingWorkout = useState(false); var loadingWorkout = stateLoadingWorkout[0]; var setLoadingWorkout = stateLoadingWorkout[1];
+
+  var stateHistoryRecords = useState([]); var historyRecords = stateHistoryRecords[0]; var setHistoryRecords = stateHistoryRecords[1];
+  var stateLoadingHistory = useState(false); var loadingHistory = stateLoadingHistory[0]; var setLoadingHistory = stateLoadingHistory[1];
 
   var stateName = useState(""); var newName = stateName[0]; var setNewName = stateName[1];
   var stateSets = useState("3"); var newSets = stateSets[0]; var setNewSets = stateSets[1];
@@ -794,15 +939,22 @@ function ProfessorPanel(props) {
   useEffect(function () {
     if (!selectedStudent) return;
     var cancelled = false;
-    async function loadWorkout() {
+    async function loadWorkoutAndHistory() {
       setLoadingWorkout(true);
-      var result = await supabase.from("exercises").select("*").eq("student_id", selectedStudent.id).order("created_at", { ascending: true });
+      setLoadingHistory(true);
+
+      var exercisesResult = await supabase.from("exercises").select("*").eq("student_id", selectedStudent.id).order("created_at", { ascending: true });
+      var historyResult = await supabase.from("workout_history").select("*").eq("student_id", selectedStudent.id).order("created_at", { ascending: false }).limit(5);
+
       if (!cancelled) {
-        if (!result.error && result.data) setWorkout(groupByTab(result.data));
+        if (!exercisesResult.error && exercisesResult.data) setWorkout(groupByTab(exercisesResult.data));
         setLoadingWorkout(false);
+
+        if (!historyResult.error && historyResult.data) setHistoryRecords(historyResult.data);
+        setLoadingHistory(false);
       }
     }
-    loadWorkout();
+    loadWorkoutAndHistory();
     return function () { cancelled = true; };
   }, [selectedStudent]);
 
@@ -886,7 +1038,13 @@ function ProfessorPanel(props) {
         </div>
       </div>
 
-      <div style={{ paddingTop: 18, display: "flex", gap: 8 }}>
+      <p style={{ color: C.silverDim, fontSize: 11.5, margin: "8px 0 16px" }}>
+        {formatFriendlyDate(new Date())}
+      </p>
+
+      <RecentHistoryList records={historyRecords} loading={loadingHistory} />
+
+      <div style={{ display: "flex", gap: 8 }}>
         {TABS.map(function (k) {
           var active = k === tab;
           return (
