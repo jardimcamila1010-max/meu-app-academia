@@ -14,6 +14,7 @@ import {
   Mail,
   Lock,
   User as UserIcon,
+  PartyPopper,
 } from "lucide-react";
 import { supabase } from "./supabaseClient.js";
 
@@ -58,7 +59,6 @@ var plainInputStyle = {
   outline: "none",
 };
 
-// Agrupa a lista plana de exercicios (vinda do Supabase) em { A: [...], B: [...], C: [...] }
 function groupByTab(rows) {
   var grouped = { A: [], B: [], C: [] };
   for (var i = 0; i < rows.length; i++) {
@@ -66,6 +66,23 @@ function groupByTab(rows) {
     if (grouped[row.workout_tab]) grouped[row.workout_tab].push(row);
   }
   return grouped;
+}
+
+// Formata um timestamp ISO para "dd/mm HH:MM" e diz se e hoje.
+function formatHistoryDate(isoString) {
+  var d = new Date(isoString);
+  var now = new Date();
+  var isToday =
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate();
+
+  var dd = String(d.getDate()).padStart(2, "0");
+  var mm = String(d.getMonth() + 1).padStart(2, "0");
+  var hh = String(d.getHours()).padStart(2, "0");
+  var min = String(d.getMinutes()).padStart(2, "0");
+
+  return { isToday: isToday, label: dd + "/" + mm + " " + hh + ":" + min };
 }
 
 function IconField(props) {
@@ -131,9 +148,6 @@ function TopBrandBar() {
   );
 }
 
-// Shell centralizado: usado nas telas de boas-vindas, login, cadastro e selecao de aluno.
-// min-height: 100vh + padding-top com safe-area para nao ficar atras do notch,
-// e justifyContent: center para o conteudo nao grudar no topo em telas altas.
 function Shell(props) {
   return (
     <div
@@ -157,9 +171,6 @@ function Shell(props) {
   );
 }
 
-// Container das telas internas (Aluno/Professor): ocupa a tela toda,
-// respeita a safe-area no topo, mas fica alinhado ao topo (nao centralizado)
-// porque tem lista de conteudo que deve rolar normalmente.
 function PageContainer(props) {
   return (
     <div
@@ -359,10 +370,23 @@ function StudentPicker(props) {
           <p style={{ color: C.silverDim, fontSize: 13, textAlign: "center" }}>Nenhum aluno cadastrado ainda.</p>
         ) : null}
         {students.map(function (s) {
+          var history = s._lastHistory;
+          var historyLabel = null;
+          if (history) {
+            var formatted = formatHistoryDate(history.created_at);
+            historyLabel = formatted.isToday
+              ? "Concluiu o Treino " + history.workout_tab + " hoje"
+              : "Ultimo treino: " + formatted.label;
+          }
           return (
             <button key={s.id} onClick={function () { props.onPick(s); }} style={{ display: "flex", alignItems: "center", gap: 12, background: C.panel, border: "1px solid " + C.border, borderRadius: 12, padding: "12px 14px", cursor: "pointer", textAlign: "left" }}>
               <Avatar name={s.name} />
-              <span style={{ color: C.white, fontSize: 15, fontWeight: 600, flex: 1 }}>{s.name}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ color: C.white, fontSize: 15, fontWeight: 600, margin: 0 }}>{s.name}</p>
+                <p style={{ color: history && formatHistoryDate(history.created_at).isToday ? C.blue : C.silverDim, fontSize: 11.5, margin: "2px 0 0", fontWeight: historyLabel ? 600 : 400 }}>
+                  {historyLabel || "Sem treinos concluidos ainda"}
+                </p>
+              </div>
               <ChevronRight size={18} color={C.silverDim} />
             </button>
           );
@@ -390,9 +414,10 @@ function ProgressBar(props) {
 function ExerciseCard(props) {
   var ex = props.ex;
   var stateImgError = useState(false); var imgError = stateImgError[0]; var setImgError = stateImgError[1];
+  var checked = !!ex.is_completed;
 
   return (
-    <div style={{ background: props.checked ? "rgba(47,134,198,0.08)" : C.panel, border: "1px solid " + (props.checked ? C.blueDim : C.border), borderRadius: 14, overflow: "hidden" }}>
+    <div style={{ background: checked ? "rgba(47,134,198,0.08)" : C.panel, border: "1px solid " + (checked ? C.blueDim : C.border), borderRadius: 14, overflow: "hidden" }}>
       <div style={{ width: "100%", height: 160, background: C.panelAlt }}>
         {ex.image && !imgError ? (
           <img src={ex.image} alt={ex.name} onError={function () { setImgError(true); }} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
@@ -405,7 +430,7 @@ function ExerciseCard(props) {
 
       <div style={{ padding: 14, display: "flex", gap: 12, alignItems: "center" }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ color: C.white, fontSize: 14, fontWeight: 700, margin: "0 0 4px", textDecoration: props.checked ? "line-through" : "none", opacity: props.checked ? 0.6 : 1 }}>
+          <p style={{ color: C.white, fontSize: 14, fontWeight: 700, margin: "0 0 4px", textDecoration: checked ? "line-through" : "none", opacity: checked ? 0.6 : 1 }}>
             {ex.name}
           </p>
           <p style={{ color: C.silverDim, fontSize: 12.5, margin: "0 0 8px" }}>{ex.sets} series x {ex.reps} reps</p>
@@ -421,22 +446,65 @@ function ExerciseCard(props) {
           </div>
         </div>
 
-        <button onClick={function () { props.onToggle(ex.id); }} aria-label="Marcar exercicio" style={{ width: 38, height: 38, borderRadius: "50%", border: "2px solid " + (props.checked ? C.blue : C.border), background: props.checked ? C.blue : "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>
-          <Check size={18} color={props.checked ? C.white : C.silverDim} strokeWidth={3} />
+        <button onClick={function () { props.onToggle(ex); }} aria-label="Marcar exercicio" style={{ width: 38, height: 38, borderRadius: "50%", border: "2px solid " + (checked ? C.blue : C.border), background: checked ? C.blue : "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>
+          <Check size={18} color={checked ? C.white : C.silverDim} strokeWidth={3} />
         </button>
       </div>
     </div>
   );
 }
 
-// Painel do aluno: busca os exercicios direto da tabela `exercises`, filtrando por student_id.
+// Modal de resumo exibido ao finalizar o treino do dia.
+function FinishWorkoutModal(props) {
+  return (
+    <div
+      style={{
+        position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        padding: 20, zIndex: 50,
+      }}
+    >
+      <div style={{ width: "100%", maxWidth: 320, background: C.panel, border: "1px solid " + C.blueDim, borderRadius: 16, padding: 24, textAlign: "center" }}>
+        <div style={{ width: 56, height: 56, borderRadius: "50%", background: C.blueDeep, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px" }}>
+          <PartyPopper size={26} color={C.blue} />
+        </div>
+        <p style={{ color: C.white, fontSize: 16, fontWeight: 800, margin: "0 0 6px" }}>
+          Parabens, {props.name}!
+        </p>
+        <p style={{ color: C.silverDim, fontSize: 13, margin: "0 0 20px" }}>
+          Treino concluido. 🔥
+        </p>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <button
+            onClick={props.onClearForTomorrow}
+            disabled={props.clearing}
+            style={{ background: C.blue, border: "none", borderRadius: 8, color: C.white, fontSize: 13.5, fontWeight: 700, padding: "11px 0", cursor: "pointer", opacity: props.clearing ? 0.7 : 1 }}
+          >
+            {props.clearing ? "Preparando..." : "Limpar para amanha"}
+          </button>
+          <button
+            onClick={props.onClose}
+            style={{ background: "transparent", border: "1px solid " + C.border, borderRadius: 8, color: C.silverDim, fontSize: 13.5, fontWeight: 700, padding: "11px 0", cursor: "pointer" }}
+          >
+            Fechar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Painel do aluno: le/atualiza exercicios (com is_completed persistido) e
+// registra o historico ao finalizar o treino do dia.
 function AlunoDashboard(props) {
   var student = props.student;
   var stateTab = useState("A"); var tab = stateTab[0]; var setTab = stateTab[1];
   var stateWorkout = useState({ A: [], B: [], C: [] }); var workout = stateWorkout[0]; var setWorkout = stateWorkout[1];
   var stateLoading = useState(true); var loading = stateLoading[0]; var setLoading = stateLoading[1];
-  var stateChecked = useState({}); var checkedMap = stateChecked[0]; var setCheckedMap = stateChecked[1];
   var stateWeights = useState({}); var weights = stateWeights[0]; var setWeights = stateWeights[1];
+  var stateFinishing = useState(false); var finishing = stateFinishing[0]; var setFinishing = stateFinishing[1];
+  var stateShowModal = useState(false); var showModal = stateShowModal[0]; var setShowModal = stateShowModal[1];
+  var stateClearing = useState(false); var clearing = stateClearing[0]; var setClearing = stateClearing[1];
 
   useEffect(function () {
     var cancelled = false;
@@ -454,14 +522,25 @@ function AlunoDashboard(props) {
     return function () { cancelled = true; };
   }, [student.id]);
 
-  function toggle(exId) {
-    var key = student.id + "-" + tab + "-" + exId;
-    setCheckedMap(function (prev) {
+  // Marca/desmarca o exercicio e grava is_completed direto no Supabase.
+  async function toggle(ex) {
+    var newValue = !ex.is_completed;
+    setWorkout(function (prev) {
       var next = Object.assign({}, prev);
-      next[key] = !next[key];
+      next[tab] = next[tab].map(function (e) { return e.id === ex.id ? Object.assign({}, e, { is_completed: newValue }) : e; });
       return next;
     });
+    var result = await supabase.from("exercises").update({ is_completed: newValue }).eq("id", ex.id);
+    if (result.error) {
+      // reverte em caso de falha
+      setWorkout(function (prev) {
+        var next = Object.assign({}, prev);
+        next[tab] = next[tab].map(function (e) { return e.id === ex.id ? Object.assign({}, e, { is_completed: !newValue }) : e; });
+        return next;
+      });
+    }
   }
+
   function setWeight(exId, val) {
     var key = student.id + "-" + tab + "-" + exId;
     setWeights(function (prev) {
@@ -471,10 +550,39 @@ function AlunoDashboard(props) {
     });
   }
 
+  async function finishWorkout() {
+    setFinishing(true);
+    var result = await supabase.from("workout_history").insert([
+      { student_id: student.id, workout_tab: tab },
+    ]);
+    setFinishing(false);
+    if (!result.error) {
+      setShowModal(true);
+    }
+  }
+
+  async function clearForTomorrow() {
+    setClearing(true);
+    var result = await supabase
+      .from("exercises")
+      .update({ is_completed: false })
+      .eq("student_id", student.id)
+      .eq("workout_tab", tab);
+    setClearing(false);
+    if (!result.error) {
+      setWorkout(function (prev) {
+        var next = Object.assign({}, prev);
+        next[tab] = next[tab].map(function (e) { return Object.assign({}, e, { is_completed: false }); });
+        return next;
+      });
+      setShowModal(false);
+    }
+  }
+
   var list = workout[tab];
   var doneCount = 0;
   for (var i = 0; i < list.length; i++) {
-    if (checkedMap[student.id + "-" + tab + "-" + list[i].id]) doneCount++;
+    if (list[i].is_completed) doneCount++;
   }
 
   return (
@@ -528,7 +636,6 @@ function AlunoDashboard(props) {
                 <ExerciseCard
                   key={ex.id}
                   ex={ex}
-                  checked={!!checkedMap[student.id + "-" + tab + "-" + ex.id]}
                   weight={weights[student.id + "-" + tab + "-" + ex.id]}
                   onToggle={toggle}
                   onWeightChange={setWeight}
@@ -538,17 +645,34 @@ function AlunoDashboard(props) {
           </div>
         )}
 
-        {!loading && list.length > 0 && doneCount === list.length ? (
-          <div style={{ marginTop: 16, padding: "12px 14px", borderRadius: 10, background: "rgba(47,134,198,0.12)", border: "1px solid " + C.blueDim, color: C.white, fontSize: 13, fontWeight: 700, textAlign: "center" }}>
-            Treino {tab} concluido. Bom trabalho!
-          </div>
+        {!loading && list.length > 0 ? (
+          <button
+            onClick={finishWorkout}
+            disabled={finishing}
+            style={{
+              width: "100%", marginTop: 18, background: C.blue, border: "none", borderRadius: 10,
+              color: C.white, fontSize: 14, fontWeight: 700, padding: "13px 0", cursor: "pointer",
+              opacity: finishing ? 0.7 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+            }}
+          >
+            <Flame size={16} />
+            {finishing ? "Salvando..." : "Finalizar Treino de Hoje"}
+          </button>
         ) : null}
       </div>
+
+      {showModal ? (
+        <FinishWorkoutModal
+          name={student.name.split(" ")[0]}
+          clearing={clearing}
+          onClearForTomorrow={clearForTomorrow}
+          onClose={function () { setShowModal(false); }}
+        />
+      ) : null}
     </PageContainer>
   );
 }
 
-// Linha de exercicio no painel do professor, com modo de edicao inline.
 function ProfessorExerciseRow(props) {
   var ex = props.ex;
   var stateEditing = useState(false); var editing = stateEditing[0]; var setEditing = stateEditing[1];
@@ -616,8 +740,9 @@ function ProfessorExerciseRow(props) {
   );
 }
 
-// Painel do professor: le a lista de alunos de `profiles` (role = aluno)
-// e gerencia (adiciona, edita, remove) os exercicios daquele aluno na tabela `exercises`.
+// Painel do professor. Ao carregar a lista de alunos, tambem busca o
+// historico de treinos (workout_history) e anexa o mais recente de cada um
+// em s._lastHistory, exibido pelo StudentPicker.
 function ProfessorPanel(props) {
   var stateStudents = useState([]); var students = stateStudents[0]; var setStudents = stateStudents[1];
   var stateLoadingStudents = useState(true); var loadingStudents = stateLoadingStudents[0]; var setLoadingStudents = stateLoadingStudents[1];
@@ -633,13 +758,37 @@ function ProfessorPanel(props) {
   var stateImage = useState(""); var newImage = stateImage[0]; var setNewImage = stateImage[1];
 
   useEffect(function () {
-    async function loadStudents() {
+    async function loadStudentsAndHistory() {
       setLoadingStudents(true);
-      var result = await supabase.from("profiles").select("*").eq("role", "aluno");
-      if (!result.error && result.data) setStudents(result.data);
+      var studentsResult = await supabase.from("profiles").select("*").eq("role", "aluno");
+      if (studentsResult.error || !studentsResult.data) {
+        setLoadingStudents(false);
+        return;
+      }
+
+      var historyResult = await supabase
+        .from("workout_history")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      var latestByStudent = {};
+      if (!historyResult.error && historyResult.data) {
+        for (var i = 0; i < historyResult.data.length; i++) {
+          var row = historyResult.data[i];
+          if (!latestByStudent[row.student_id]) {
+            latestByStudent[row.student_id] = row;
+          }
+        }
+      }
+
+      var enriched = studentsResult.data.map(function (s) {
+        return Object.assign({}, s, { _lastHistory: latestByStudent[s.id] || null });
+      });
+
+      setStudents(enriched);
       setLoadingStudents(false);
     }
-    loadStudents();
+    loadStudentsAndHistory();
   }, []);
 
   useEffect(function () {
