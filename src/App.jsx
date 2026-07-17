@@ -17,6 +17,8 @@ import {
   PartyPopper,
   History,
   Loader2,
+  Trophy,
+  Eye,
 } from "lucide-react";
 import { supabase } from "./supabaseClient.js";
 
@@ -24,6 +26,16 @@ var LOGO_URL = "https://i.postimg.cc/NLQPwFC2/Whats-App-Image-2026-07-14-at-17-0
 var IMG_GERAL = "https://images.unsplash.com/photo-1583454110551-21f2fa2afe61?w=500&q=80";
 var TABS = ["A", "B", "C"];
 var WEEK_DAY_LABELS = ["S", "T", "Q", "Q", "S", "S", "D"]; // Seg Ter Qua Qui Sex Sab Dom
+
+var INCENTIVE_PHRASES = [
+  "O segredo do sucesso e a constancia!",
+  "Treino pago! Agora foque na sua alimentacao e descanso.",
+  "Voce esta mais perto do seu objetivo hoje!",
+  "Disciplina vence motivacao. Ate amanha!",
+  "Cada treino concluido e um tijolo na sua evolucao.",
+  "Corpo cansado, missao cumprida. Descanse bem!",
+  "Hoje foi mais um dia que voce nao desistiu.",
+];
 
 var C = {
   bg: "#11161d",
@@ -118,7 +130,11 @@ function formatTime(input) {
   return hh + ":" + mm;
 }
 
-// Pequeno spinner giratorio usado nos botoes durante chamadas ao Supabase.
+function pickRandomPhrase() {
+  var i = Math.floor(Math.random() * INCENTIVE_PHRASES.length);
+  return INCENTIVE_PHRASES[i];
+}
+
 function Spinner(props) {
   var size = props.size || 16;
   return (
@@ -464,7 +480,6 @@ function ProgressBar(props) {
   );
 }
 
-// Modal exibido ao clicar em um dia do calendario de frequencia.
 function HistoryDayModal(props) {
   return (
     <div
@@ -489,13 +504,28 @@ function HistoryDayModal(props) {
         </div>
 
         {props.record ? (
-          <div style={{ display: "flex", alignItems: "center", gap: 12, background: C.panelAlt, border: "1px solid " + C.border, borderRadius: 10, padding: 12 }}>
-            <div style={{ width: 40, height: 40, borderRadius: "50%", background: C.blueDeep, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-              <Flame size={18} color={C.blue} />
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, background: C.panelAlt, border: "1px solid " + C.border, borderRadius: 10, padding: 12, marginBottom: props.record.summary_data ? 12 : 0 }}>
+              <div style={{ width: 40, height: 40, borderRadius: "50%", background: C.blueDeep, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <Flame size={18} color={C.blue} />
+              </div>
+              <p style={{ color: C.white, fontSize: 13.5, margin: 0 }}>
+                Voce concluiu o Treino <b>{props.record.workout_tab}</b> as <b>{formatTime(props.record.created_at)}</b>
+              </p>
             </div>
-            <p style={{ color: C.white, fontSize: 13.5, margin: 0 }}>
-              Voce concluiu o Treino <b>{props.record.workout_tab}</b> as <b>{formatTime(props.record.created_at)}</b>
-            </p>
+
+            {props.record.summary_data && props.record.summary_data.length > 0 ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {props.record.summary_data.map(function (item, idx) {
+                  return (
+                    <div key={idx} style={{ display: "flex", justifyContent: "space-between", background: C.panel, border: "1px solid " + C.border, borderRadius: 8, padding: "6px 10px" }}>
+                      <span style={{ color: C.white, fontSize: 12 }}>{item.name}</span>
+                      <span style={{ color: C.silverDim, fontSize: 12 }}>{item.weight ? item.weight + "kg" : "-"}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : null}
           </div>
         ) : (
           <p style={{ color: C.silverDim, fontSize: 13, margin: 0 }}>Nenhum treino registrado neste dia.</p>
@@ -505,8 +535,6 @@ function HistoryDayModal(props) {
   );
 }
 
-// Secao "Minha Frequencia": dias da semana atual, clicaveis, abrindo um Modal
-// com o detalhe do treino concluido naquele dia (buscado em workout_history).
 function WeeklyFrequency(props) {
   var days = buildWeekDays(new Date());
   var today = new Date();
@@ -611,47 +639,46 @@ function ExerciseCard(props) {
   );
 }
 
-function FinishWorkoutModal(props) {
+// Tela "Missao Cumprida" exibida quando o aluno ja finalizou um treino hoje.
+// Substitui a lista de exercicios ate ele clicar em "Ver exercicios novamente".
+function MissionAccomplishedScreen(props) {
   return (
-    <div
-      style={{
-        position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        padding: 20, zIndex: 50,
-      }}
-    >
-      <div style={{ width: "100%", maxWidth: 320, background: C.panel, border: "1px solid " + C.blueDim, borderRadius: 16, padding: 24, textAlign: "center" }}>
-        <div style={{ width: 56, height: 56, borderRadius: "50%", background: C.blueDeep, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px" }}>
-          <PartyPopper size={26} color={C.blue} />
-        </div>
-        <p style={{ color: C.white, fontSize: 16, fontWeight: 800, margin: "0 0 6px" }}>
-          Parabens, {props.name}!
-        </p>
-        <p style={{ color: C.silverDim, fontSize: 13, margin: "0 0 16px" }}>
-          Treino concluido. 🔥
-        </p>
-
-        {props.resetError ? (
-          <p style={{ color: C.danger, fontSize: 12, margin: "0 0 14px" }}>{props.resetError}</p>
-        ) : null}
-
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <button
-            onClick={props.onClearForTomorrow}
-            disabled={props.clearing}
-            style={{ background: C.blue, border: "none", borderRadius: 8, color: C.white, fontSize: 13.5, fontWeight: 700, padding: "11px 0", cursor: "pointer", opacity: props.clearing ? 0.7 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
-          >
-            {props.clearing ? <Spinner size={14} /> : null}
-            {props.clearing ? "Limpando..." : "Limpar para amanha"}
-          </button>
-          <button
-            onClick={props.onClose}
-            style={{ background: "transparent", border: "1px solid " + C.border, borderRadius: 8, color: C.silverDim, fontSize: 13.5, fontWeight: 700, padding: "11px 0", cursor: "pointer" }}
-          >
-            Fechar
-          </button>
-        </div>
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", paddingTop: 40, paddingBottom: 20 }}>
+      <div
+        style={{
+          width: 84, height: 84, borderRadius: "50%",
+          background: "radial-gradient(circle at 30% 30%, " + C.blueDim + ", " + C.blueDeep + ")",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          marginBottom: 20, border: "1px solid " + C.border,
+          boxShadow: "0 0 0 6px rgba(47,134,198,0.08)",
+        }}
+      >
+        <Trophy size={38} color={C.white} />
       </div>
+
+      <p style={{ color: C.white, fontSize: 19, fontWeight: 800, margin: "0 0 6px", textTransform: "uppercase", letterSpacing: 0.5 }}>
+        Missao Cumprida
+      </p>
+      <p style={{ color: C.blue, fontSize: 13, fontWeight: 700, margin: "0 0 18px" }}>
+        Treino {props.lastTab} concluido hoje as {props.lastTime}
+      </p>
+
+      <div style={{ background: C.panel, border: "1px solid " + C.border, borderRadius: 14, padding: "18px 20px", maxWidth: 320, marginBottom: 26 }}>
+        <p style={{ color: C.white, fontSize: 14.5, fontWeight: 600, margin: 0, lineHeight: 1.5 }}>
+          "{props.phrase}"
+        </p>
+      </div>
+
+      <button
+        onClick={props.onViewExercises}
+        style={{
+          display: "flex", alignItems: "center", gap: 6,
+          background: "transparent", border: "1px solid " + C.border, borderRadius: 8,
+          color: C.silverDim, fontSize: 12.5, fontWeight: 600, padding: "9px 16px", cursor: "pointer",
+        }}
+      >
+        <Eye size={14} /> Ver exercicios novamente
+      </button>
     </div>
   );
 }
@@ -664,14 +691,11 @@ function AlunoDashboard(props) {
   var stateLoading = useState(true); var loading = stateLoading[0]; var setLoading = stateLoading[1];
   var stateWeights = useState({}); var weights = stateWeights[0]; var setWeights = stateWeights[1];
   var stateFinishing = useState(false); var finishing = stateFinishing[0]; var setFinishing = stateFinishing[1];
-  var stateShowModal = useState(false); var showModal = stateShowModal[0]; var setShowModal = stateShowModal[1];
-  var stateClearing = useState(false); var clearing = stateClearing[0]; var setClearing = stateClearing[1];
-  var stateResetError = useState(""); var resetError = stateResetError[0]; var setResetError = stateResetError[1];
+  var stateFinishError = useState(""); var finishError = stateFinishError[0]; var setFinishError = stateFinishError[1];
   var stateHistoryRecords = useState([]); var historyRecords = stateHistoryRecords[0]; var setHistoryRecords = stateHistoryRecords[1];
+  var statePhrase = useState(pickRandomPhrase); var phrase = statePhrase[0];
+  var stateForceView = useState(false); var forceView = stateForceView[0]; var setForceView = stateForceView[1];
 
-  // Busca os exercicios do aluno logado direto do Supabase e substitui o
-  // estado local por completo. Chamada no carregamento inicial e sempre que
-  // precisamos garantir que a tela reflete 100% o que esta no banco.
   async function fetchExercises() {
     var result = await supabase
       .from("exercises")
@@ -686,7 +710,7 @@ function AlunoDashboard(props) {
   }
 
   async function fetchHistory() {
-    var result = await supabase.from("workout_history").select("*").eq("student_id", student.id);
+    var result = await supabase.from("workout_history").select("*").eq("student_id", student.id).order("created_at", { ascending: false });
     if (!result.error && result.data) {
       setHistoryRecords(result.data);
     }
@@ -698,16 +722,15 @@ function AlunoDashboard(props) {
     async function initialLoad() {
       setLoading(true);
       await fetchExercises();
+      await fetchHistory();
       if (!cancelled) setLoading(false);
     }
     initialLoad();
-    fetchHistory();
     return function () { cancelled = true; };
   }, [student.id]);
 
   async function toggle(ex) {
     var newValue = !ex.is_completed;
-    // Atualizacao otimista para resposta instantanea no toque...
     setWorkout(function (prev) {
       var next = Object.assign({}, prev);
       next[tab] = next[tab].map(function (e) { return e.id === ex.id ? Object.assign({}, e, { is_completed: newValue }) : e; });
@@ -722,7 +745,6 @@ function AlunoDashboard(props) {
       .select();
 
     if (result.error || !result.data || result.data.length === 0) {
-      // ...com rollback caso o update nao tenha sido aceito.
       setWorkout(function (prev) {
         var next = Object.assign({}, prev);
         next[tab] = next[tab].map(function (e) { return e.id === ex.id ? Object.assign({}, e, { is_completed: !newValue }) : e; });
@@ -740,55 +762,71 @@ function AlunoDashboard(props) {
     });
   }
 
-  async function finishWorkout() {
-    setFinishing(true);
-    var result = await supabase.from("workout_history").insert([
-      { student_id: student.id, workout_tab: tab },
-    ]).select();
-    setFinishing(false);
-
-    if (!result.error) {
-      if (result.data && result.data[0]) {
-        setHistoryRecords(function (prev) { return prev.concat([result.data[0]]); });
-      }
-      setResetError("");
-      setShowModal(true);
-    }
-  }
-
-  // Zera is_completed do treino atual daquele aluno e, em seguida,
-  // chama fetchExercises() para buscar o estado real do banco -- e a
-  // tela mostrar os quadradinhos limpos imediatamente.
-  async function clearForTomorrow() {
-    setClearing(true);
-    setResetError("");
-
-    var updateResult = await supabase
+  // Zera is_completed do treino em segundo plano, sem travar a tela
+  // (a "Missao Cumprida" ja esta visivel enquanto isso roda).
+  async function resetTodayWorkoutSilently(tabToReset) {
+    await supabase
       .from("exercises")
       .update({ is_completed: false })
       .eq("student_id", student.id)
-      .eq("workout_tab", tab)
+      .eq("workout_tab", tabToReset)
       .select();
+    await fetchExercises();
+  }
 
-    if (updateResult.error) {
-      setClearing(false);
-      setResetError("Erro ao limpar: " + updateResult.error.message);
+  async function finishWorkout() {
+    setFinishing(true);
+    setFinishError("");
+
+    var list = workout[tab];
+    var snapshot = list.map(function (ex) {
+      var key = student.id + "-" + tab + "-" + ex.id;
+      return {
+        name: ex.name,
+        sets: ex.sets,
+        reps: ex.reps,
+        completed: !!ex.is_completed,
+        weight: weights[key] || null,
+      };
+    });
+
+    var insertResult = await supabase.from("workout_history").insert([
+      { student_id: student.id, workout_tab: tab, summary_data: snapshot },
+    ]).select();
+
+    setFinishing(false);
+
+    if (insertResult.error) {
+      setFinishError("Nao foi possivel salvar o treino: " + insertResult.error.message);
       return;
     }
 
-    // Refresh direto do banco -- garante sincronia mesmo que a resposta
-    // do update nao traga as linhas (ex.: RLS retornando array vazio em alguns casos).
-    await fetchExercises();
+    if (insertResult.data && insertResult.data[0]) {
+      setHistoryRecords(function (prev) { return [insertResult.data[0]].concat(prev); });
+    }
+    setForceView(false);
 
-    setClearing(false);
-    setShowModal(false);
+    // Reset silencioso em segundo plano: nao aguardamos travando a UI da
+    // "Missao Cumprida", que ja aparece assim que o historico foi salvo.
+    resetTodayWorkoutSilently(tab);
   }
+
+  var todayRecord = null;
+  for (var i = 0; i < historyRecords.length; i++) {
+    if (isSameDate(new Date(historyRecords[i].created_at), new Date())) {
+      todayRecord = historyRecords[i];
+      break;
+    }
+  }
+  var hasFinishedToday = !!todayRecord;
 
   var list = workout[tab];
   var doneCount = 0;
-  for (var i = 0; i < list.length; i++) {
-    if (list[i].is_completed) doneCount++;
+  for (var j = 0; j < list.length; j++) {
+    if (list[j].is_completed) doneCount++;
   }
+
+  var showMissionScreen = hasFinishedToday && !forceView && !loading;
 
   return (
     <PageContainer>
@@ -812,77 +850,89 @@ function AlunoDashboard(props) {
         <WeeklyFrequency historyRecords={historyRecords} />
       </div>
 
-      <p style={{ color: C.silverDim, fontSize: 12, margin: "0 0 14px" }}>
-        {formatFriendlyDate(new Date())}
-      </p>
+      {loading ? (
+        <p style={{ color: C.silverDim, fontSize: 13, textAlign: "center", padding: "20px 0" }}>Carregando...</p>
+      ) : showMissionScreen ? (
+        <MissionAccomplishedScreen
+          phrase={phrase}
+          lastTab={todayRecord.workout_tab}
+          lastTime={formatTime(todayRecord.created_at)}
+          onViewExercises={function () { setForceView(true); }}
+        />
+      ) : (
+        <React.Fragment>
+          <p style={{ color: C.silverDim, fontSize: 12, margin: "0 0 14px" }}>
+            {formatFriendlyDate(new Date())}
+          </p>
 
-      <div style={{ display: "flex", gap: 8 }}>
-        {TABS.map(function (k) {
-          var active = k === tab;
-          return (
-            <button key={k} onClick={function () { setTab(k); }} style={{ flex: 1, padding: "10px 8px", borderRadius: 10, border: "1px solid " + (active ? C.blue : C.border), background: active ? C.blueDeep : C.panel, color: active ? C.white : C.silverDim, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
-              Treino {k}
-            </button>
-          );
-        })}
-      </div>
-
-      <div style={{ paddingTop: 16 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-          <Flame size={16} color={C.blue} />
-          <h2 style={{ color: C.white, fontSize: 16, fontWeight: 800, margin: 0 }}>Treino {tab}</h2>
-        </div>
-
-        <ProgressBar done={doneCount} total={list.length} />
-
-        {loading ? (
-          <p style={{ color: C.silverDim, fontSize: 13, textAlign: "center", padding: "20px 0" }}>Carregando treino...</p>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {list.length === 0 ? (
-              <p style={{ color: C.silverDim, fontSize: 13, textAlign: "center", padding: "20px 0" }}>
-                Nenhum exercicio cadastrado neste treino ainda.
-              </p>
-            ) : null}
-            {list.map(function (ex) {
+          <div style={{ display: "flex", gap: 8 }}>
+            {TABS.map(function (k) {
+              var active = k === tab;
               return (
-                <ExerciseCard
-                  key={ex.id}
-                  ex={ex}
-                  weight={weights[student.id + "-" + tab + "-" + ex.id]}
-                  onToggle={toggle}
-                  onWeightChange={setWeight}
-                />
+                <button key={k} onClick={function () { setTab(k); }} style={{ flex: 1, padding: "10px 8px", borderRadius: 10, border: "1px solid " + (active ? C.blue : C.border), background: active ? C.blueDeep : C.panel, color: active ? C.white : C.silverDim, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+                  Treino {k}
+                </button>
               );
             })}
           </div>
-        )}
 
-        {!loading && list.length > 0 ? (
-          <button
-            onClick={finishWorkout}
-            disabled={finishing}
-            style={{
-              width: "100%", marginTop: 18, background: C.blue, border: "none", borderRadius: 10,
-              color: C.white, fontSize: 14, fontWeight: 700, padding: "13px 0", cursor: "pointer",
-              opacity: finishing ? 0.7 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-            }}
-          >
-            {finishing ? <Spinner size={16} /> : <Flame size={16} />}
-            {finishing ? "Salvando..." : "Finalizar Treino de Hoje"}
-          </button>
-        ) : null}
-      </div>
+          <div style={{ paddingTop: 16 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+              <Flame size={16} color={C.blue} />
+              <h2 style={{ color: C.white, fontSize: 16, fontWeight: 800, margin: 0 }}>Treino {tab}</h2>
+            </div>
 
-      {showModal ? (
-        <FinishWorkoutModal
-          name={student.name.split(" ")[0]}
-          clearing={clearing}
-          resetError={resetError}
-          onClearForTomorrow={clearForTomorrow}
-          onClose={function () { setShowModal(false); }}
-        />
-      ) : null}
+            <ProgressBar done={doneCount} total={list.length} />
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {list.length === 0 ? (
+                <p style={{ color: C.silverDim, fontSize: 13, textAlign: "center", padding: "20px 0" }}>
+                  Nenhum exercicio cadastrado neste treino ainda.
+                </p>
+              ) : null}
+              {list.map(function (ex) {
+                return (
+                  <ExerciseCard
+                    key={ex.id}
+                    ex={ex}
+                    weight={weights[student.id + "-" + tab + "-" + ex.id]}
+                    onToggle={toggle}
+                    onWeightChange={setWeight}
+                  />
+                );
+              })}
+            </div>
+
+            {finishError ? (
+              <p style={{ color: C.danger, fontSize: 12.5, marginTop: 10, textAlign: "center" }}>{finishError}</p>
+            ) : null}
+
+            {list.length > 0 ? (
+              <button
+                onClick={finishWorkout}
+                disabled={finishing}
+                style={{
+                  width: "100%", marginTop: 18, background: C.blue, border: "none", borderRadius: 10,
+                  color: C.white, fontSize: 14, fontWeight: 700, padding: "13px 0", cursor: "pointer",
+                  opacity: finishing ? 0.7 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                }}
+              >
+                {finishing ? <Spinner size={16} /> : <Flame size={16} />}
+                {finishing ? "Salvando..." : "Finalizar Treino de Hoje"}
+              </button>
+            ) : null}
+
+            {forceView ? (
+              <button
+                onClick={function () { setForceView(false); }}
+                style={{ width: "100%", marginTop: 10, background: "transparent", border: "1px solid " + C.border, borderRadius: 8, color: C.silverDim, fontSize: 12.5, fontWeight: 600, padding: "9px 0", cursor: "pointer" }}
+              >
+                Voltar para Missao Cumprida
+              </button>
+            ) : null}
+          </div>
+        </React.Fragment>
+      )}
     </PageContainer>
   );
 }
@@ -983,9 +1033,6 @@ function RecentHistoryList(props) {
   );
 }
 
-// Painel do professor. selectedStudent.id e sempre o UUID de profiles
-// (identico ao auth.uid() do aluno) -- usado em toda query de exercises
-// e workout_history, nunca o telefone.
 function ProfessorPanel(props) {
   var stateStudents = useState([]); var students = stateStudents[0]; var setStudents = stateStudents[1];
   var stateLoadingStudents = useState(true); var loadingStudents = stateLoadingStudents[0]; var setLoadingStudents = stateLoadingStudents[1];
@@ -1044,7 +1091,6 @@ function ProfessorPanel(props) {
       setLoadingWorkout(true);
       setLoadingHistory(true);
 
-      // selectedStudent.id e o UUID (profiles.id) -- usado como student_id em ambas as tabelas.
       var exercisesResult = await supabase.from("exercises").select("*").eq("student_id", selectedStudent.id).order("created_at", { ascending: true });
       var historyResult = await supabase.from("workout_history").select("*").eq("student_id", selectedStudent.id).order("created_at", { ascending: false }).limit(5);
 
