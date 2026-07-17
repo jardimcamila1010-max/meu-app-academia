@@ -1,0 +1,16 @@
+{
+  "short_name": "PhisicForm",
+  "name": "Phisic Form Academia",
+  "icons": [
+    {
+      "src": "https://i.postimg.cc/t44c0481/011ba851-fcdd-4435-bdd2-dba40ab85882.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/",
+  "display": "standalone",
+  "theme_color": "#000000",
+  "background_color": "#000000"
+}
