@@ -2,8 +2,8 @@
 <html lang="pt-br">
   <head>
     <meta charset="UTF-8" />
-    <!-- ESSA LINHA ABAIXO É A QUE CONSERTA O TAMANHO DA TELA -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <!-- Adicionamos 'viewport-fit=cover' para ocupar a tela toda, inclusive embaixo -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     
     <title>Phisic Form</title>
 
@@ -17,6 +17,20 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Phisic Form">
+
+    <style>
+      /* Isso aqui garante que o fundo de "fora" do app também seja preto */
+      html, body {
+        background-color: #000000;
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        overflow: hidden;
+      }
+      #root {
+        height: 100%;
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>
