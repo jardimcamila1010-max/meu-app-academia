@@ -20,7 +20,8 @@ import {
   Trophy,
   Eye,
   BookOpen,
-  CalendarDays,
+  Play,
+  Lock as LockIcon,
 } from "lucide-react";
 import { supabase } from "./supabaseClient.js";
 
@@ -29,12 +30,13 @@ var IMG_GERAL = "https://images.unsplash.com/photo-1583454110551-21f2fa2afe61?w=
 var TABS = ["A", "B", "C"];
 
 var DAY_TABS = [
-  { key: "segunda", label: "Seg" },
-  { key: "terca", label: "Ter" },
-  { key: "quarta", label: "Qua" },
-  { key: "quinta", label: "Qui" },
-  { key: "sexta", label: "Sex" },
-  { key: "sabado", label: "Sab" },
+  { key: "segunda", label: "S" },
+  { key: "terca", label: "T" },
+  { key: "quarta", label: "Q" },
+  { key: "quinta", label: "Q" },
+  { key: "sexta", label: "S" },
+  { key: "sabado", label: "S" },
+  { key: "domingo", label: "D" },
 ];
 var DAY_FULL_LABEL = {
   domingo: "Domingo",
@@ -45,7 +47,6 @@ var DAY_FULL_LABEL = {
   sexta: "Sexta-feira",
   sabado: "Sabado",
 };
-var WEEK_DAY_LABELS = ["S", "T", "Q", "Q", "S", "S", "D"]; // Seg Ter Qua Qui Sex Sab Dom
 
 var INCENTIVE_PHRASES = [
   "O segredo do sucesso e a constancia!",
@@ -96,15 +97,6 @@ var plainInputStyle = {
 
 var textareaStyle = Object.assign({}, plainInputStyle, { resize: "vertical", minHeight: 60, fontFamily: "inherit" });
 
-function groupByTab(rows) {
-  var grouped = { A: [], B: [], C: [] };
-  for (var i = 0; i < rows.length; i++) {
-    var row = rows[i];
-    if (grouped[row.workout_tab]) grouped[row.workout_tab].push(row);
-  }
-  return grouped;
-}
-
 function groupByDay(rows) {
   var grouped = {};
   for (var i = 0; i < DAY_TABS.length; i++) grouped[DAY_TABS[i].key] = [];
@@ -115,8 +107,8 @@ function groupByDay(rows) {
   return grouped;
 }
 
-function getTodayDayKey() {
-  var day = new Date().getDay(); // 0 domingo ... 6 sabado
+function getDayKeyForDate(date) {
+  var day = date.getDay();
   var map = ["domingo", "segunda", "terca", "quarta", "quinta", "sexta", "sabado"];
   return map[day];
 }
@@ -127,6 +119,12 @@ function isSameDate(a, b) {
     a.getMonth() === b.getMonth() &&
     a.getDate() === b.getDate()
   );
+}
+
+function stripTime(d) {
+  var copy = new Date(d);
+  copy.setHours(0, 0, 0, 0);
+  return copy;
 }
 
 function getMondayOfWeek(date) {
@@ -429,7 +427,7 @@ function SignupScreen(props) {
     }
 
     if (signUpResult.data.session) {
-      props.onSignupSuccess({ id: userId, name: name.trim(), phone: phone.trim(), role: "aluno" });
+      props.onSignupSuccess({ id: userId, name: name.trim(), phone: phone.trim(), role: "aluno", workout_started_at: null });
     } else {
       setInfo("Conta criada! Confirme seu e-mail e depois faca login.");
     }
@@ -529,107 +527,72 @@ function ProgressBar(props) {
   );
 }
 
-function HistoryDayModal(props) {
+function WeekCircleRow(props) {
   return (
-    <div
-      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 60 }}
-      onClick={props.onClose}
-    >
-      <div onClick={function (e) { e.stopPropagation(); }} style={{ width: "100%", maxWidth: 320, background: C.panel, border: "1px solid " + C.blueDim, borderRadius: 16, padding: 22 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-          <p style={{ color: C.white, fontSize: 14, fontWeight: 800, margin: 0 }}>Historico de {formatFriendlyDate(props.date)}</p>
-          <button onClick={props.onClose} aria-label="Fechar" style={{ width: 28, height: 28, borderRadius: 8, border: "1px solid " + C.border, background: "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
-            <X size={14} color={C.silverDim} />
-          </button>
-        </div>
-
-        {props.record ? (
-          <div>
-            <div style={{ display: "flex", alignItems: "center", gap: 12, background: C.panelAlt, border: "1px solid " + C.border, borderRadius: 10, padding: 12, marginBottom: props.record.summary_data ? 12 : 0 }}>
-              <div style={{ width: 40, height: 40, borderRadius: "50%", background: C.blueDeep, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                <Flame size={18} color={C.blue} />
-              </div>
-              <p style={{ color: C.white, fontSize: 13.5, margin: 0 }}>
-                Voce concluiu o Treino <b>{props.record.workout_tab}</b> as <b>{formatTime(props.record.created_at)}</b>
-              </p>
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 6, marginBottom: 8 }}>
+      {props.items.map(function (item) {
+        return (
+          <button
+            key={item.key}
+            onClick={item.onClick}
+            style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, flex: 1, background: "transparent", border: "none", padding: 0, cursor: "pointer" }}
+          >
+            <span style={{ color: C.silverDim, fontSize: 10.5, fontWeight: 700 }}>{item.topLabel}</span>
+            <div
+              style={{
+                width: 32, height: 32, borderRadius: "50%",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                background: item.highlighted ? C.blue : C.panelAlt,
+                border: "2px solid " + (item.ringActive ? C.blue : C.border),
+                color: item.highlighted ? C.white : C.silverDim,
+                fontSize: 11, fontWeight: 700,
+              }}
+            >
+              {item.circleText}
             </div>
-
-            {props.record.summary_data && props.record.summary_data.length > 0 ? (
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                {props.record.summary_data.map(function (item, idx) {
-                  return (
-                    <div key={idx} style={{ display: "flex", justifyContent: "space-between", background: C.panel, border: "1px solid " + C.border, borderRadius: 8, padding: "6px 10px" }}>
-                      <span style={{ color: C.white, fontSize: 12 }}>{item.name}</span>
-                      <span style={{ color: C.silverDim, fontSize: 12 }}>{item.weight ? item.weight + "kg" : "-"}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : null}
-          </div>
-        ) : (
-          <p style={{ color: C.silverDim, fontSize: 13, margin: 0 }}>Nenhum treino registrado neste dia.</p>
-        )}
-      </div>
+          </button>
+        );
+      })}
     </div>
   );
 }
 
-function WeeklyFrequency(props) {
-  var days = buildWeekDays(new Date());
-  var today = new Date();
-  var stateModalDay = useState(null); var modalDay = stateModalDay[0]; var setModalDay = stateModalDay[1];
-
-  function findRecordForDay(d) {
-    for (var j = 0; j < props.historyRecords.length; j++) {
-      var recDate = new Date(props.historyRecords[j].created_at);
-      if (isSameDate(recDate, d)) return props.historyRecords[j];
-    }
-    return null;
+function HistorySummaryBlock(props) {
+  if (!props.record) {
+    return (
+      <div style={{ background: C.panel, border: "1px solid " + C.border, borderRadius: 12, padding: "20px 16px", textAlign: "center" }}>
+        <p style={{ color: C.silverDim, fontSize: 13, margin: 0 }}>Nenhum treino registrado neste dia.</p>
+      </div>
+    );
   }
-
+  var record = props.record;
   return (
-    <div style={{ marginBottom: 22 }}>
-      <p style={{ color: C.silverDim, fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10 }}>
-        Minha Frequencia
-      </p>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 6 }}>
-        {days.map(function (d, i) {
-          var record = findRecordForDay(d);
-          var attended = !!record;
-          var isToday = isSameDate(d, today);
-          return (
-            <button
-              key={i}
-              onClick={function () { setModalDay({ date: d, record: record }); }}
-              style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, flex: 1, background: "transparent", border: "none", padding: 0, cursor: "pointer" }}
-            >
-              <span style={{ color: C.silverDim, fontSize: 10.5, fontWeight: 700 }}>{WEEK_DAY_LABELS[i]}</span>
-              <div
-                style={{
-                  width: 30, height: 30, borderRadius: "50%",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  background: attended ? C.blue : C.panelAlt,
-                  border: "1px solid " + (isToday ? C.blue : C.border),
-                  color: attended ? C.white : C.silverDim,
-                  fontSize: 11.5, fontWeight: 700,
-                }}
-              >
-                {d.getDate()}
-              </div>
-            </button>
-          );
-        })}
+    <div>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, background: C.panel, border: "1px solid " + C.blueDim, borderRadius: 12, padding: 14, marginBottom: record.summary_data ? 10 : 0 }}>
+        <div style={{ width: 42, height: 42, borderRadius: "50%", background: C.blueDeep, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <Flame size={18} color={C.blue} />
+        </div>
+        <p style={{ color: C.white, fontSize: 13.5, margin: 0 }}>
+          Treino <b>{record.workout_tab}</b> concluido as <b>{formatTime(record.created_at)}</b>
+        </p>
       </div>
 
-      {modalDay ? (
-        <HistoryDayModal date={modalDay.date} record={modalDay.record} onClose={function () { setModalDay(null); }} />
+      {record.summary_data && record.summary_data.length > 0 ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {record.summary_data.map(function (item, idx) {
+            return (
+              <div key={idx} style={{ display: "flex", justifyContent: "space-between", background: C.panel, border: "1px solid " + C.border, borderRadius: 8, padding: "8px 10px" }}>
+                <span style={{ color: C.white, fontSize: 12.5 }}>{item.name}</span>
+                <span style={{ color: C.silverDim, fontSize: 12 }}>{item.weight ? item.weight + "kg" : "-"}</span>
+              </div>
+            );
+          })}
+        </div>
       ) : null}
     </div>
   );
 }
 
-// Modal de detalhe do exercicio: duas fotos de execucao + observacoes do professor.
 function ExerciseDetailModal(props) {
   var ex = props.ex;
   return (
@@ -710,9 +673,38 @@ function ExerciseCard(props) {
   );
 }
 
+function LockedExerciseCard(props) {
+  var ex = props.ex;
+  var stateImgError = useState(false); var imgError = stateImgError[0]; var setImgError = stateImgError[1];
+
+  return (
+    <div
+      onClick={function () { props.onOpenDetail(ex); }}
+      style={{ background: C.panel, border: "1px solid " + C.border, borderRadius: 14, overflow: "hidden", cursor: "pointer", opacity: 0.9 }}
+    >
+      <div style={{ width: "100%", height: 140, background: C.panelAlt, position: "relative" }}>
+        {ex.image && !imgError ? (
+          <img src={ex.image} alt={ex.name} onError={function () { setImgError(true); }} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+        ) : (
+          <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <ImageIcon size={30} color={C.silverDim} />
+          </div>
+        )}
+        <div style={{ position: "absolute", top: 8, right: 8, width: 26, height: 26, borderRadius: "50%", background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <LockIcon size={13} color={C.silverDim} />
+        </div>
+      </div>
+      <div style={{ padding: 12 }}>
+        <p style={{ color: C.white, fontSize: 13.5, fontWeight: 700, margin: "0 0 3px" }}>{ex.name}</p>
+        <p style={{ color: C.silverDim, fontSize: 12, margin: 0 }}>{ex.sets} series x {ex.reps} reps</p>
+      </div>
+    </div>
+  );
+}
+
 function MissionAccomplishedScreen(props) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", paddingTop: 40, paddingBottom: 20 }}>
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", paddingTop: 30, paddingBottom: 20 }}>
       <div
         style={{
           width: 84, height: 84, borderRadius: "50%",
@@ -748,25 +740,14 @@ function MissionAccomplishedScreen(props) {
   );
 }
 
-// Banner exibido quando ha um treino agendado para o dia de hoje.
-function TodayReadyBanner(props) {
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 10, background: "rgba(47,134,198,0.1)", border: "1px solid " + C.blueDim, borderRadius: 12, padding: "12px 14px", marginBottom: 16 }}>
-      <div style={{ width: 34, height: 34, borderRadius: "50%", background: C.blueDeep, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-        <CalendarDays size={16} color={C.blue} />
-      </div>
-      <p style={{ color: C.white, fontSize: 12.5, fontWeight: 600, margin: 0, lineHeight: 1.4 }}>
-        Seu treino de hoje ({props.dayLabel}) esta pronto!
-      </p>
-    </div>
-  );
-}
-
-// Painel do aluno.
+// Painel do aluno. O estado "Iniciado" agora vive em profiles.workout_started_at,
+// entao sobrevive a reload de pagina e troca de aba/app.
 function AlunoDashboard(props) {
   var student = props.student;
+  var weekDays = buildWeekDays(new Date());
+  var today = new Date();
+
   var stateAllExercises = useState([]); var allExercises = stateAllExercises[0]; var setAllExercises = stateAllExercises[1];
-  var stateTab = useState("A"); var tab = stateTab[0]; var setTab = stateTab[1];
   var stateLoading = useState(true); var loading = stateLoading[0]; var setLoading = stateLoading[1];
   var stateWeights = useState({}); var weights = stateWeights[0]; var setWeights = stateWeights[1];
   var stateFinishing = useState(false); var finishing = stateFinishing[0]; var setFinishing = stateFinishing[1];
@@ -774,30 +755,28 @@ function AlunoDashboard(props) {
   var stateHistoryRecords = useState([]); var historyRecords = stateHistoryRecords[0]; var setHistoryRecords = stateHistoryRecords[1];
   var statePhrase = useState(pickRandomPhrase); var phrase = statePhrase[0];
   var stateForceView = useState(false); var forceView = stateForceView[0]; var setForceView = stateForceView[1];
-  var stateManualBrowse = useState(false); var manualBrowse = stateManualBrowse[0]; var setManualBrowse = stateManualBrowse[1];
   var stateDetailEx = useState(null); var detailEx = stateDetailEx[0]; var setDetailEx = stateDetailEx[1];
+  var stateStarting = useState(false); var starting = stateStarting[0]; var setStarting = stateStarting[1];
 
-  var todayKey = getTodayDayKey();
-  var todayLabel = DAY_FULL_LABEL[todayKey];
+  // workout_started_at persistido no perfil -- sobrevive a reload da pagina.
+  var stateStartedAt = useState(student.workout_started_at || null);
+  var startedAt = stateStartedAt[0]; var setStartedAt = stateStartedAt[1];
+
+  var stateSelectedDate = useState(function () {
+    for (var i = 0; i < weekDays.length; i++) { if (isSameDate(weekDays[i], today)) return weekDays[i]; }
+    return weekDays[0];
+  });
+  var selectedDate = stateSelectedDate[0]; var setSelectedDate = stateSelectedDate[1];
 
   async function fetchExercises() {
-    var result = await supabase
-      .from("exercises")
-      .select("*")
-      .eq("student_id", student.id)
-      .order("created_at", { ascending: true });
-
-    if (!result.error && result.data) {
-      setAllExercises(result.data);
-    }
+    var result = await supabase.from("exercises").select("*").eq("student_id", student.id).order("created_at", { ascending: true });
+    if (!result.error && result.data) setAllExercises(result.data);
     return result;
   }
 
   async function fetchHistory() {
     var result = await supabase.from("workout_history").select("*").eq("student_id", student.id).order("created_at", { ascending: false });
-    if (!result.error && result.data) {
-      setHistoryRecords(result.data);
-    }
+    if (!result.error && result.data) setHistoryRecords(result.data);
     return result;
   }
 
@@ -813,42 +792,71 @@ function AlunoDashboard(props) {
     return function () { cancelled = true; };
   }, [student.id]);
 
-  var workoutByTab = groupByTab(allExercises);
-  var todayScheduled = allExercises.filter(function (e) { return e.scheduled_day === todayKey; });
-  var hasTodaySchedule = todayScheduled.length > 0;
+  function selectDate(d) {
+    setSelectedDate(d);
+    setForceView(false);
+  }
 
-  // Lista efetivamente exibida: se ha treino agendado para hoje e o aluno
-  // nao pediu para navegar manualmente por A/B/C, mostra o agendado.
-  var displayList = (hasTodaySchedule && !manualBrowse) ? todayScheduled : workoutByTab[tab];
-  var effectiveTab = (hasTodaySchedule && !manualBrowse && todayScheduled[0]) ? todayScheduled[0].workout_tab : tab;
+  var isToday = isSameDate(selectedDate, today);
+  var isPast = stripTime(selectedDate).getTime() < stripTime(today).getTime();
+  var selectedDayKey = getDayKeyForDate(selectedDate);
 
-  async function toggle(ex) {
+  var plannedList = allExercises.filter(function (e) { return e.scheduled_day === selectedDayKey; });
+
+  function findHistoryForDate(d) {
+    for (var j = 0; j < historyRecords.length; j++) {
+      if (isSameDate(new Date(historyRecords[j].created_at), d)) return historyRecords[j];
+    }
+    return null;
+  }
+  var historyForSelectedDate = findHistoryForDate(selectedDate);
+
+  // Logica inteligente: o treino de hoje ja abre "Interativo" (sem botao
+  // Iniciar) se workout_started_at for de hoje OU se ja existe pelo menos
+  // um exercicio de hoje marcado como concluido.
+  var startedAtIsToday = startedAt ? isSameDate(new Date(startedAt), today) : false;
+  var hasAnyCompletedToday = plannedList.some(function (e) { return !!e.is_completed; });
+  var isInteractive = isToday && (startedAtIsToday || hasAnyCompletedToday);
+
+  function toggle(ex) {
     var newValue = !ex.is_completed;
     setAllExercises(function (prev) {
       return prev.map(function (e) { return e.id === ex.id ? Object.assign({}, e, { is_completed: newValue }) : e; });
     });
 
-    var result = await supabase
+    supabase
       .from("exercises")
       .update({ is_completed: newValue })
       .eq("id", ex.id)
       .eq("student_id", student.id)
-      .select();
-
-    if (result.error || !result.data || result.data.length === 0) {
-      setAllExercises(function (prev) {
-        return prev.map(function (e) { return e.id === ex.id ? Object.assign({}, e, { is_completed: !newValue }) : e; });
+      .select()
+      .then(function (result) {
+        if (result.error || !result.data || result.data.length === 0) {
+          setAllExercises(function (prev) {
+            return prev.map(function (e) { return e.id === ex.id ? Object.assign({}, e, { is_completed: !newValue }) : e; });
+          });
+        }
       });
-    }
   }
 
   function setWeight(exId, val) {
-    var key = student.id + "-" + effectiveTab + "-" + exId;
+    var key = student.id + "-" + selectedDayKey + "-" + exId;
     setWeights(function (prev) {
       var next = Object.assign({}, prev);
       next[key] = val;
       return next;
     });
+  }
+
+  // Grava workout_started_at = agora no perfil do aluno.
+  async function startWorkout() {
+    setStarting(true);
+    var nowIso = new Date().toISOString();
+    var result = await supabase.from("profiles").update({ workout_started_at: nowIso }).eq("id", student.id).select();
+    setStarting(false);
+    if (!result.error) {
+      setStartedAt(nowIso);
+    }
   }
 
   async function resetTodayWorkoutSilently(exIds) {
@@ -857,13 +865,22 @@ function AlunoDashboard(props) {
     await fetchExercises();
   }
 
+  // Zera workout_started_at no perfil, preparando o dia seguinte.
+  async function resetStartedFlag() {
+    var result = await supabase.from("profiles").update({ workout_started_at: null }).eq("id", student.id).select();
+    if (!result.error) {
+      setStartedAt(null);
+    }
+  }
+
   async function finishWorkout() {
     setFinishing(true);
     setFinishError("");
 
-    var list = displayList;
+    var list = plannedList;
+    var mainTab = list.length > 0 ? list[0].workout_tab : "-";
     var snapshot = list.map(function (ex) {
-      var key = student.id + "-" + effectiveTab + "-" + ex.id;
+      var key = student.id + "-" + selectedDayKey + "-" + ex.id;
       return {
         name: ex.name,
         sets: ex.sets,
@@ -873,41 +890,59 @@ function AlunoDashboard(props) {
       };
     });
 
-    var insertResult = await supabase.from("workout_history").insert([
-      { student_id: student.id, workout_tab: effectiveTab, summary_data: snapshot },
-    ]).select();
+    var existing = findHistoryForDate(today);
+    var writeResult;
+    if (existing) {
+      writeResult = await supabase
+        .from("workout_history")
+        .update({ workout_tab: mainTab, summary_data: snapshot, created_at: new Date().toISOString() })
+        .eq("id", existing.id)
+        .select();
+    } else {
+      writeResult = await supabase
+        .from("workout_history")
+        .insert([{ student_id: student.id, workout_tab: mainTab, summary_data: snapshot }])
+        .select();
+    }
 
     setFinishing(false);
 
-    if (insertResult.error) {
-      setFinishError("Nao foi possivel salvar o treino: " + insertResult.error.message);
+    if (writeResult.error) {
+      setFinishError("Nao foi possivel salvar o treino: " + writeResult.error.message);
       return;
     }
 
-    if (insertResult.data && insertResult.data[0]) {
-      setHistoryRecords(function (prev) { return [insertResult.data[0]].concat(prev); });
+    if (writeResult.data && writeResult.data[0]) {
+      var savedRecord = writeResult.data[0];
+      setHistoryRecords(function (prev) {
+        var withoutOld = prev.filter(function (r) { return r.id !== savedRecord.id; });
+        return [savedRecord].concat(withoutOld);
+      });
     }
+
     setForceView(false);
 
     var idsToReset = list.map(function (ex) { return ex.id; });
     resetTodayWorkoutSilently(idsToReset);
+    resetStartedFlag();
   }
-
-  var todayRecord = null;
-  for (var i = 0; i < historyRecords.length; i++) {
-    if (isSameDate(new Date(historyRecords[i].created_at), new Date())) {
-      todayRecord = historyRecords[i];
-      break;
-    }
-  }
-  var hasFinishedToday = !!todayRecord;
 
   var doneCount = 0;
-  for (var j = 0; j < displayList.length; j++) {
-    if (displayList[j].is_completed) doneCount++;
-  }
+  for (var j = 0; j < plannedList.length; j++) { if (plannedList[j].is_completed) doneCount++; }
 
-  var showMissionScreen = hasFinishedToday && !forceView && !loading;
+  var weekCircleItems = weekDays.map(function (d, i) {
+    var hasHist = !!findHistoryForDate(d);
+    return {
+      key: DAY_TABS[i].key,
+      topLabel: DAY_TABS[i].label,
+      circleText: d.getDate(),
+      highlighted: hasHist,
+      ringActive: isSameDate(d, selectedDate),
+      onClick: function () { selectDate(d); },
+    };
+  });
+
+  var showMissionScreen = isToday && historyForSelectedDate && !forceView && !loading;
 
   return (
     <PageContainer>
@@ -927,106 +962,97 @@ function AlunoDashboard(props) {
         </button>
       </div>
 
-      <div style={{ paddingTop: 20 }}>
-        <WeeklyFrequency historyRecords={historyRecords} />
+      <div style={{ paddingTop: 20, marginBottom: 6 }}>
+        <p style={{ color: C.silverDim, fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10 }}>
+          Minha Semana
+        </p>
+        <WeekCircleRow items={weekCircleItems} />
       </div>
+
+      <p style={{ color: C.silverDim, fontSize: 12, margin: "10px 0 16px" }}>
+        {formatFriendlyDate(selectedDate)}
+      </p>
 
       {loading ? (
         <p style={{ color: C.silverDim, fontSize: 13, textAlign: "center", padding: "20px 0" }}>Carregando...</p>
       ) : showMissionScreen ? (
         <MissionAccomplishedScreen
           phrase={phrase}
-          lastTab={todayRecord.workout_tab}
-          lastTime={formatTime(todayRecord.created_at)}
+          lastTab={historyForSelectedDate.workout_tab}
+          lastTime={formatTime(historyForSelectedDate.created_at)}
           onViewExercises={function () { setForceView(true); }}
         />
+      ) : isPast ? (
+        <HistorySummaryBlock record={historyForSelectedDate} />
       ) : (
-        <React.Fragment>
-          <p style={{ color: C.silverDim, fontSize: 12, margin: "0 0 14px" }}>
-            {formatFriendlyDate(new Date())}
-          </p>
+        <div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+            <Flame size={16} color={C.blue} />
+            <h2 style={{ color: C.white, fontSize: 16, fontWeight: 800, margin: 0 }}>
+              {isToday ? "Treino de Hoje" : "Treino planejado - " + DAY_FULL_LABEL[selectedDayKey]}
+            </h2>
+          </div>
 
-          {hasTodaySchedule && !manualBrowse ? (
-            <TodayReadyBanner dayLabel={todayLabel} />
-          ) : null}
+          {isInteractive ? <ProgressBar done={doneCount} total={plannedList.length} /> : null}
 
-          {hasTodaySchedule ? (
-            <button
-              onClick={function () { setManualBrowse(function (v) { return !v; }); }}
-              style={{ width: "100%", marginBottom: 14, background: "transparent", border: "1px solid " + C.border, borderRadius: 8, color: C.silverDim, fontSize: 12, fontWeight: 600, padding: "8px 0", cursor: "pointer" }}
-            >
-              {manualBrowse ? "Voltar ao treino de hoje" : "Ver treino por A / B / C"}
-            </button>
-          ) : null}
-
-          {(!hasTodaySchedule || manualBrowse) ? (
-            <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-              {TABS.map(function (k) {
-                var active = k === tab;
-                return (
-                  <button key={k} onClick={function () { setTab(k); }} style={{ flex: 1, padding: "10px 8px", borderRadius: 10, border: "1px solid " + (active ? C.blue : C.border), background: active ? C.blueDeep : C.panel, color: active ? C.white : C.silverDim, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
-                    Treino {k}
-                  </button>
-                );
-              })}
-            </div>
-          ) : null}
-
-          <div>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-              <Flame size={16} color={C.blue} />
-              <h2 style={{ color: C.white, fontSize: 16, fontWeight: 800, margin: 0 }}>
-                {hasTodaySchedule && !manualBrowse ? "Treino de Hoje" : "Treino " + tab}
-              </h2>
-            </div>
-
-            <ProgressBar done={doneCount} total={displayList.length} />
-
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              {displayList.length === 0 ? (
-                <p style={{ color: C.silverDim, fontSize: 13, textAlign: "center", padding: "20px 0" }}>
-                  Nenhum exercicio cadastrado ainda.
-                </p>
-              ) : null}
-              {displayList.map(function (ex) {
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {plannedList.length === 0 ? (
+              <p style={{ color: C.silverDim, fontSize: 13, textAlign: "center", padding: "20px 0" }}>
+                Nenhum exercicio planejado para este dia.
+              </p>
+            ) : null}
+            {plannedList.map(function (ex) {
+              if (isInteractive) {
                 return (
                   <ExerciseCard
                     key={ex.id}
                     ex={ex}
-                    weight={weights[student.id + "-" + effectiveTab + "-" + ex.id]}
+                    weight={weights[student.id + "-" + selectedDayKey + "-" + ex.id]}
                     onToggle={toggle}
                     onWeightChange={setWeight}
                     onOpenDetail={setDetailEx}
                   />
                 );
-              })}
-            </div>
-
-            {finishError ? (
-              <p style={{ color: C.danger, fontSize: 12.5, marginTop: 10, textAlign: "center" }}>{finishError}</p>
-            ) : null}
-
-            {displayList.length > 0 ? (
-              <button
-                onClick={finishWorkout}
-                disabled={finishing}
-                style={{ width: "100%", marginTop: 18, background: C.blue, border: "none", borderRadius: 10, color: C.white, fontSize: 14, fontWeight: 700, padding: "13px 0", cursor: "pointer", opacity: finishing ? 0.7 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
-              >
-                {finishing ? <Spinner size={16} /> : <Flame size={16} />}
-                {finishing ? "Salvando..." : "Finalizar Treino de Hoje"}
-              </button>
-            ) : null}
-
-            {forceView ? (
-              <button
-                onClick={function () { setForceView(false); }}
-                style={{ width: "100%", marginTop: 10, background: "transparent", border: "1px solid " + C.border, borderRadius: 8, color: C.silverDim, fontSize: 12.5, fontWeight: 600, padding: "9px 0", cursor: "pointer" }}
-              >
-                Voltar para Missao Cumprida
-              </button>
-            ) : null}
+              }
+              return <LockedExerciseCard key={ex.id} ex={ex} onOpenDetail={setDetailEx} />;
+            })}
           </div>
-        </React.Fragment>
+
+          {finishError ? (
+            <p style={{ color: C.danger, fontSize: 12.5, marginTop: 10, textAlign: "center" }}>{finishError}</p>
+          ) : null}
+
+          {isToday && plannedList.length > 0 && !isInteractive ? (
+            <button
+              onClick={startWorkout}
+              disabled={starting}
+              style={{ width: "100%", marginTop: 18, background: C.blue, border: "none", borderRadius: 10, color: C.white, fontSize: 14, fontWeight: 700, padding: "13px 0", cursor: "pointer", opacity: starting ? 0.7 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
+            >
+              {starting ? <Spinner size={16} /> : <Play size={16} />}
+              {starting ? "Iniciando..." : "Iniciar Treino de Hoje"}
+            </button>
+          ) : null}
+
+          {isToday && isInteractive ? (
+            <button
+              onClick={finishWorkout}
+              disabled={finishing}
+              style={{ width: "100%", marginTop: 18, background: C.blue, border: "none", borderRadius: 10, color: C.white, fontSize: 14, fontWeight: 700, padding: "13px 0", cursor: "pointer", opacity: finishing ? 0.7 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
+            >
+              {finishing ? <Spinner size={16} /> : <Flame size={16} />}
+              {finishing ? "Salvando..." : "Finalizar Treino"}
+            </button>
+          ) : null}
+
+          {forceView ? (
+            <button
+              onClick={function () { setForceView(false); }}
+              style={{ width: "100%", marginTop: 10, background: "transparent", border: "1px solid " + C.border, borderRadius: 8, color: C.silverDim, fontSize: 12.5, fontWeight: 600, padding: "9px 0", cursor: "pointer" }}
+            >
+              Voltar para Missao Cumprida
+            </button>
+          ) : null}
+        </div>
       )}
 
       {detailEx ? <ExerciseDetailModal ex={detailEx} onClose={function () { setDetailEx(null); }} /> : null}
@@ -1144,7 +1170,6 @@ function RecentHistoryList(props) {
   );
 }
 
-// Tela de gerenciamento da Biblioteca Geral de exercicios.
 function LibraryManager(props) {
   var stateItems = useState([]); var items = stateItems[0]; var setItems = stateItems[1];
   var stateLoading = useState(true); var loading = stateLoading[0]; var setLoading = stateLoading[1];
@@ -1236,11 +1261,8 @@ function LibraryManager(props) {
   );
 }
 
-// Painel do professor: planejamento semanal (Seg-Sab) por aluno,
-// selecao a partir da Biblioteca com preenchimento automatico, e
-// campo de Observacoes Tecnicas por exercicio.
 function ProfessorPanel(props) {
-  var stateMode = useState("students"); var mode = stateMode[0]; var setMode = stateMode[1]; // 'students' | 'library'
+  var stateMode = useState("students"); var mode = stateMode[0]; var setMode = stateMode[1];
   var stateStudents = useState([]); var students = stateStudents[0]; var setStudents = stateStudents[1];
   var stateLoadingStudents = useState(true); var loadingStudents = stateLoadingStudents[0]; var setLoadingStudents = stateLoadingStudents[1];
 
@@ -1339,6 +1361,18 @@ function ProfessorPanel(props) {
   var byDay = groupByDay(allExercises);
   var list = byDay[day];
 
+  var weekCircleItems = DAY_TABS.map(function (d) {
+    var count = byDay[d.key] ? byDay[d.key].length : 0;
+    return {
+      key: d.key,
+      topLabel: d.label,
+      circleText: count > 0 ? String(count) : "-",
+      highlighted: count > 0,
+      ringActive: d.key === day,
+      onClick: function () { setDay(d.key); },
+    };
+  });
+
   function handleLibrarySelect(id) {
     setLibrarySelectId(id);
     if (!id) return;
@@ -1415,19 +1449,12 @@ function ProfessorPanel(props) {
 
       <RecentHistoryList records={historyRecords} loading={loadingHistory} />
 
-      <p style={{ color: C.silverDim, fontSize: 11.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>Planejamento Semanal</p>
-      <div style={{ display: "flex", gap: 6, marginBottom: 16, overflowX: "auto" }}>
-        {DAY_TABS.map(function (d) {
-          var active = d.key === day;
-          return (
-            <button key={d.key} onClick={function () { setDay(d.key); }} style={{ flex: 1, minWidth: 46, padding: "9px 4px", borderRadius: 10, border: "1px solid " + (active ? C.blue : C.border), background: active ? C.blueDeep : C.panel, color: active ? C.white : C.silverDim, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>
-              {d.label}
-            </button>
-          );
-        })}
-      </div>
+      <p style={{ color: C.silverDim, fontSize: 11.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>
+        Planejamento Semanal <span style={{ opacity: 0.7 }}>(numero = qtd. de exercicios)</span>
+      </p>
+      <WeekCircleRow items={weekCircleItems} />
 
-      <div>
+      <div style={{ paddingTop: 12 }}>
         {loadingWorkout ? (
           <p style={{ color: C.silverDim, fontSize: 13, textAlign: "center", padding: "12px 0" }}>Carregando exercicios...</p>
         ) : (
