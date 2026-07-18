@@ -22,6 +22,8 @@ import {
   Lock as LockIcon,
   CheckCircle2,
   Coffee,
+  Rocket,
+  FileEdit,
 } from "lucide-react";
 import { supabase } from "./supabaseClient.js";
 
@@ -70,6 +72,7 @@ var C = {
   white: "#f3f5f7",
   danger: "#c65a5a",
   success: "#3fae6a",
+  warning: "#c99a3f",
 };
 
 var inputStyle = {
@@ -270,7 +273,8 @@ function ImageThumb(props) {
   var stateError = useState(false); var imgError = stateError[0]; var setImgError = stateError[1];
   var size = props.size || 44;
   var iconSize = props.iconSize || Math.round((typeof size === "number" ? size : 44) * 0.45);
-  var showImage = !!props.src && !imgError;
+  var hasSrc = !!(props.src && props.src.trim());
+  var showImage = hasSrc && !imgError;
 
   return (
     <div
@@ -1012,7 +1016,9 @@ function CategoryHeading(props) {
   );
 }
 
-// Painel do aluno. A lista do dia e sempre agrupada por categoria.
+// Painel do aluno. So enxerga exercicios com is_published = true.
+// Se o professor ainda esta editando (rascunho), o aluno ve "dia de
+// descanso ou sem registro" -- exatamente como um dia realmente vazio.
 function AlunoDashboard(props) {
   var student = props.student;
   var weekDays = buildWeekDays(new Date());
@@ -1039,8 +1045,14 @@ function AlunoDashboard(props) {
   });
   var selectedDate = stateSelectedDate[0]; var setSelectedDate = stateSelectedDate[1];
 
+  // So busca exercicios PUBLICADOS -- rascunhos do professor ficam invisiveis.
   async function fetchExercises() {
-    var result = await supabase.from("exercises").select("*").eq("student_id", student.id).order("created_at", { ascending: true });
+    var result = await supabase
+      .from("exercises")
+      .select("*")
+      .eq("student_id", student.id)
+      .eq("is_published", true)
+      .order("created_at", { ascending: true });
     if (!result.error && result.data) setAllExercises(result.data);
     return result;
   }
@@ -1275,13 +1287,7 @@ function AlunoDashboard(props) {
           {isInteractive ? <ProgressBar done={doneCount} total={plannedList.length} /> : null}
 
           {plannedList.length === 0 ? (
-            isPast ? (
-              <RestOrNoRecordMessage />
-            ) : (
-              <p style={{ color: C.silverDim, fontSize: 13, textAlign: "center", padding: "20px 0" }}>
-                Nenhum exercicio planejado para este dia.
-              </p>
-            )
+            <RestOrNoRecordMessage />
           ) : (
             <div>
               {groupedPlannedList.map(function (group, gIdx) {
@@ -1355,6 +1361,7 @@ function AlunoDashboard(props) {
 
 // Linha de exercicio no painel do professor (planejamento do dia).
 // Inclui Carga (weight) e Categoria (category). Sem etiqueta A/B/C.
+// Os campos de foto agora aceitam ficar vazios (bug de nao poder apagar corrigido).
 function ProfessorExerciseRow(props) {
   var ex = props.ex;
   var stateEditing = useState(false); var editing = stateEditing[0]; var setEditing = stateEditing[1];
@@ -1379,16 +1386,20 @@ function ProfessorExerciseRow(props) {
     setEditing(false);
   }
 
+  // Campos de imagem: string vazia vira null explicitamente no banco --
+  // permite ao professor APAGAR um link de foto ja cadastrado.
   function saveEdit() {
     if (!name.trim()) return;
+    var trimmedImage = image.trim();
+    var trimmedImage2 = image2.trim();
     props.onSave(ex.id, {
       name: name.trim(),
       sets: Number(sets) || 1,
       reps: reps.trim() || "-",
       weight: weight.trim() !== "" ? Number(weight.replace(",", ".")) : null,
       category: category.trim() || null,
-      image: image.trim() || null,
-      image2: image2.trim() || null,
+      image: trimmedImage === "" ? null : trimmedImage,
+      image2: trimmedImage2 === "" ? null : trimmedImage2,
       notes: notes.trim() || null,
     });
     setEditing(false);
@@ -1404,8 +1415,8 @@ function ProfessorExerciseRow(props) {
           <input type="text" placeholder="Repeticoes" value={reps} onChange={function (e) { setReps(e.target.value); }} style={Object.assign({}, plainInputStyle, { flex: 1 })} />
           <input type="number" placeholder="Carga (kg)" value={weight} onChange={function (e) { setWeight(e.target.value); }} style={Object.assign({}, plainInputStyle, { width: 90 })} />
         </div>
-        <input type="text" placeholder="URL da foto 1" value={image} onChange={function (e) { setImage(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })} />
-        <input type="text" placeholder="URL da foto 2" value={image2} onChange={function (e) { setImage2(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })} />
+        <input type="text" placeholder="URL da foto 1 (deixe vazio para remover)" value={image} onChange={function (e) { setImage(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })} />
+        <input type="text" placeholder="URL da foto 2 (deixe vazio para remover)" value={image2} onChange={function (e) { setImage2(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })} />
         <textarea placeholder="Observacoes Tecnicas" value={notes} onChange={function (e) { setNotes(e.target.value); }} style={Object.assign({}, textareaStyle, { marginBottom: 10 })} />
         <div style={{ display: "flex", gap: 8 }}>
           <button onClick={saveEdit} style={{ flex: 1, background: C.blue, border: "none", borderRadius: 8, color: C.white, fontSize: 13, fontWeight: 700, padding: "9px 0", cursor: "pointer" }}>Salvar</button>
@@ -1465,7 +1476,7 @@ function RecentHistoryList(props) {
 }
 
 // Linha de um item da Biblioteca Geral, com edicao inline de Nome,
-// Categoria, URL da foto 1 e URL da foto 2.
+// Categoria, URL da foto 1 e URL da foto 2 -- campos aceitam ficar vazios.
 function LibraryItemRow(props) {
   var it = props.item;
   var stateEditing = useState(false); var editing = stateEditing[0]; var setEditing = stateEditing[1];
@@ -1486,11 +1497,13 @@ function LibraryItemRow(props) {
   async function saveEdit() {
     if (!name.trim()) return;
     setSaving(true);
+    var trimmedImage = image.trim();
+    var trimmedImage2 = image2.trim();
     await props.onSave(it.id, {
       name: name.trim(),
       category: category.trim() || null,
-      image: image.trim() || null,
-      image2: image2.trim() || null,
+      image: trimmedImage === "" ? null : trimmedImage,
+      image2: trimmedImage2 === "" ? null : trimmedImage2,
     });
     setSaving(false);
     setEditing(false);
@@ -1501,8 +1514,8 @@ function LibraryItemRow(props) {
       <div style={{ background: C.panelAlt, border: "1px solid " + C.blueDim, borderRadius: 12, padding: 12 }}>
         <input type="text" placeholder="Nome do exercicio" value={name} onChange={function (e) { setName(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })} />
         <input type="text" placeholder="Categoria (ex: Membros Inferiores)" value={category} onChange={function (e) { setCategory(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })} />
-        <input type="text" placeholder="URL da foto 1" value={image} onChange={function (e) { setImage(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })} />
-        <input type="text" placeholder="URL da foto 2" value={image2} onChange={function (e) { setImage2(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 10 })} />
+        <input type="text" placeholder="URL da foto 1 (deixe vazio para remover)" value={image} onChange={function (e) { setImage(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })} />
+        <input type="text" placeholder="URL da foto 2 (deixe vazio para remover)" value={image2} onChange={function (e) { setImage2(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 10 })} />
         <div style={{ display: "flex", gap: 8 }}>
           <button onClick={saveEdit} disabled={saving} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: C.blue, border: "none", borderRadius: 8, color: C.white, fontSize: 13, fontWeight: 700, padding: "9px 0", cursor: "pointer", opacity: saving ? 0.7 : 1 }}>
             {saving ? <Spinner size={13} /> : null}
@@ -1633,9 +1646,31 @@ function LibraryManager(props) {
   );
 }
 
+// Aviso de status de publicacao do dia selecionado: rascunho (amarelo/cinza)
+// ou ja enviado ao aluno (verde), exibido acima do botao de envio.
+function PublishStatusBanner(props) {
+  if (props.hasExercises === false) return null;
+  var isPublished = props.isPublished;
+  return (
+    <div
+      style={{
+        display: "flex", alignItems: "center", gap: 10,
+        background: isPublished ? "rgba(63,174,106,0.1)" : "rgba(201,154,63,0.1)",
+        border: "1px solid " + (isPublished ? C.success : C.warning),
+        borderRadius: 10, padding: "10px 12px", marginBottom: 12,
+      }}
+    >
+      {isPublished ? <CheckCircle2 size={16} color={C.success} /> : <FileEdit size={16} color={C.warning} />}
+      <p style={{ color: isPublished ? C.success : C.warning, fontSize: 12.5, fontWeight: 700, margin: 0 }}>
+        {isPublished ? "Treino ja enviado ao aluno" : "Rascunho - ainda nao enviado ao aluno"}
+      </p>
+    </div>
+  );
+}
+
 // Painel do professor: dia PASSADO -> so historico/mensagem, sem formulario.
 // Dia de HOJE ou FUTURO -> planejamento normal, agrupado por categoria, com
-// selecao da biblioteca agrupada via <optgroup>.
+// selecao da biblioteca agrupada via <optgroup> e botao de envio ao aluno.
 function ProfessorPanel(props) {
   var stateMode = useState("students"); var mode = stateMode[0]; var setMode = stateMode[1];
   var stateStudents = useState([]); var students = stateStudents[0]; var setStudents = stateStudents[1];
@@ -1644,6 +1679,7 @@ function ProfessorPanel(props) {
   var stateSelected = useState(null); var selectedStudent = stateSelected[0]; var setSelectedStudent = stateSelected[1];
   var stateAllExercises = useState([]); var allExercises = stateAllExercises[0]; var setAllExercises = stateAllExercises[1];
   var stateLoadingWorkout = useState(false); var loadingWorkout = stateLoadingWorkout[0]; var setLoadingWorkout = stateLoadingWorkout[1];
+  var statePublishing = useState(false); var publishing = statePublishing[0]; var setPublishing = statePublishing[1];
 
   var stateHistoryRecords = useState([]); var historyRecords = stateHistoryRecords[0]; var setHistoryRecords = stateHistoryRecords[1];
   var stateLoadingHistory = useState(false); var loadingHistory = stateLoadingHistory[0]; var setLoadingHistory = stateLoadingHistory[1];
@@ -1769,6 +1805,9 @@ function ProfessorPanel(props) {
   var canPlan = !isPastSelected;
   var sectionTitle = getSectionTitle(isPastSelected, isTodaySelected, selectedDayKey);
 
+  // Status de publicacao do dia: so faz sentido se ha pelo menos 1 exercicio.
+  var allPublished = list.length > 0 && list.every(function (ex) { return ex.is_published; });
+
   var weekCircleItems = weekDays.map(function (d, i) {
     var hasHist = !!findHistoryForDate(historyRecords, d);
     var dIsToday = isSameDate(d, today);
@@ -1788,9 +1827,6 @@ function ProfessorPanel(props) {
   // Biblioteca agrupada por categoria, para montar as <optgroup> do select.
   var libraryGroups = groupByCategory(library);
 
-  // Correcao do bug: ao selecionar um item da biblioteca, a categoria dele
-  // e SEMPRE copiada para newCategory (mesmo se vazia, "" limpa o campo
-  // corretamente) -- garantindo que addExercise() envie category no payload.
   function handleLibrarySelect(id) {
     setLibrarySelectId(id);
     if (!id) return;
@@ -1806,9 +1842,6 @@ function ProfessorPanel(props) {
   async function addExercise() {
     if (!newName.trim()) return;
 
-    // Se o professor selecionou um item da biblioteca e nao alterou o campo
-    // de categoria manualmente, usamos a categoria do item selecionado como
-    // garantia extra (defesa contra qualquer defasagem de estado).
     var effectiveCategory = newCategory.trim();
     if (!effectiveCategory && librarySelectId) {
       var selectedLibItem = library.find(function (it) { return it.id === librarySelectId; });
@@ -1828,6 +1861,7 @@ function ProfessorPanel(props) {
       image: newImage.trim() || null,
       image2: newImage2.trim() || null,
       notes: newNotes.trim() || null,
+      is_published: false,
     };
     var result = await supabase.from("exercises").insert([payload]).select();
     if (!result.error && result.data) {
@@ -1844,8 +1878,11 @@ function ProfessorPanel(props) {
     }
   }
 
+  // Salvar uma edicao volta o exercicio para rascunho (is_published: false),
+  // ate o professor clicar em "Enviar Planejamento ao Aluno" de novo.
   async function saveEditExercise(exId, updates) {
-    var result = await supabase.from("exercises").update(updates).eq("id", exId).select();
+    var updatesWithDraft = Object.assign({}, updates, { is_published: false });
+    var result = await supabase.from("exercises").update(updatesWithDraft).eq("id", exId).select();
     if (!result.error && result.data && result.data.length > 0) {
       var updatedRow = result.data[0];
       setAllExercises(function (prev) { return prev.map(function (e) { return e.id === exId ? updatedRow : e; }); });
@@ -1856,6 +1893,21 @@ function ProfessorPanel(props) {
     var result = await supabase.from("exercises").delete().eq("id", exId);
     if (!result.error) {
       setAllExercises(function (prev) { return prev.filter(function (e) { return e.id !== exId; }); });
+    }
+  }
+
+  // Publica todos os exercicios do dia selecionado de uma vez -- o aluno
+  // so passa a enxergar esse dia depois deste clique.
+  async function publishToday() {
+    if (list.length === 0) return;
+    setPublishing(true);
+    var idsToPublish = list.map(function (ex) { return ex.id; });
+    var result = await supabase.from("exercises").update({ is_published: true }).in("id", idsToPublish).select();
+    setPublishing(false);
+    if (!result.error && result.data) {
+      var byId = {};
+      result.data.forEach(function (row) { byId[row.id] = row; });
+      setAllExercises(function (prev) { return prev.map(function (e) { return byId[e.id] || e; }); });
     }
   }
 
@@ -1906,6 +1958,8 @@ function ProfessorPanel(props) {
         <RestOrNoRecordMessage />
       ) : (
         <div>
+          <PublishStatusBanner isPublished={allPublished} hasExercises={list.length > 0} />
+
           {loadingWorkout ? (
             <p style={{ color: C.silverDim, fontSize: 13, textAlign: "center", padding: "12px 0" }}>Carregando exercicios...</p>
           ) : list.length === 0 ? (
@@ -1926,6 +1980,21 @@ function ProfessorPanel(props) {
                   </div>
                 );
               })}
+
+              <button
+                onClick={publishToday}
+                disabled={publishing || allPublished}
+                style={{
+                  width: "100%", marginTop: 14, display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                  background: allPublished ? C.panelAlt : "linear-gradient(90deg, " + C.blue + ", " + C.blueDim + ")",
+                  border: "1px solid " + (allPublished ? C.border : C.blueDim),
+                  borderRadius: 10, color: allPublished ? C.silverDim : C.white, fontSize: 14, fontWeight: 800,
+                  padding: "13px 0", cursor: allPublished ? "default" : "pointer", opacity: publishing ? 0.7 : 1,
+                }}
+              >
+                {publishing ? <Spinner size={16} /> : <Rocket size={16} />}
+                {publishing ? "Enviando..." : allPublished ? "Planejamento ja enviado" : "🚀 Enviar Planejamento ao Aluno"}
+              </button>
             </div>
           )}
 
