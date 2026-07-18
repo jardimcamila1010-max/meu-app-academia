@@ -723,8 +723,8 @@ function PressableProfileHeader(props) {
   );
 }
 
-// Menu que abre ao tocar no cabeçalho de perfil do aluno: escolher entre
-// ver o Historico de Treinos ou editar os Dados Pessoais.
+// Menu que abre ao tocar no cabeçalho de perfil do aluno: Historico de
+// Treinos, Dados Pessoais, e o novo atalho de Cardio.
 function ProfileMenuModal(props) {
   return (
     <div
@@ -742,6 +742,13 @@ function ProfileMenuModal(props) {
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <button
+            onClick={props.onSelectCardio}
+            style={{ display: "flex", alignItems: "center", gap: 10, background: C.panelAlt, border: "1px solid " + (props.cardioRunning ? C.warning : C.border), borderRadius: 12, padding: "14px 14px", color: C.white, fontSize: 14, fontWeight: 700, cursor: "pointer", textAlign: "left" }}
+          >
+            <span style={{ fontSize: 18 }}>🏃</span> Iniciar Cardio
+            {props.cardioRunning ? <span style={{ marginLeft: "auto", color: C.warning, fontSize: 12, fontWeight: 800 }}>{formatClock(props.cardioSeconds)}</span> : null}
+          </button>
           <button
             onClick={props.onSelectHistory}
             style={{ display: "flex", alignItems: "center", gap: 10, background: C.panelAlt, border: "1px solid " + C.border, borderRadius: 12, padding: "14px 14px", color: C.white, fontSize: 14, fontWeight: 700, cursor: "pointer", textAlign: "left" }}
@@ -921,77 +928,128 @@ function WeekCircleRow(props) {
   );
 }
 
-// Cronometro de Cardio/Esteira. So registra tempo -- nenhuma pergunta de
-// distancia ou intensidade. O estado (segundos, rodando, travado) vive no
-// AlunoDashboard (props), entao continua contando mesmo que o aluno role a
-// tela para ver outros exercicios, ja que o componente nao e desmontado.
-function CardioTimer(props) {
-  var seconds = props.seconds;
+// Botao de atalho para o cronometro de Cardio, visivel na tela principal
+// em qualquer dia selecionado (independente do treino de musculacao).
+function CardioQuickButton(props) {
   var running = props.running;
-  var locked = props.locked;
-
   return (
-    <div style={{ background: C.panel, border: "1px solid " + C.border, borderRadius: 14, padding: 16, marginBottom: 18 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-        <Timer size={16} color={C.blue} />
-        <p style={{ color: C.silverDim, fontSize: 11.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, margin: 0 }}>
-          Cardio / Esteira
+    <button
+      onClick={props.onClick}
+      style={{
+        display: "flex", alignItems: "center", gap: 8, width: "100%",
+        background: running ? "rgba(201,154,63,0.12)" : C.panel,
+        border: "1px solid " + (running ? C.warning : C.border),
+        borderRadius: 12, padding: "12px 14px", cursor: "pointer", marginBottom: 18,
+      }}
+    >
+      <div style={{ width: 34, height: 34, borderRadius: "50%", background: C.panelAlt, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+        <span style={{ fontSize: 16 }}>🏃</span>
+      </div>
+      <div style={{ flex: 1, textAlign: "left" }}>
+        <p style={{ color: C.white, fontSize: 13.5, fontWeight: 700, margin: 0 }}>Cardio / Esteira</p>
+        <p style={{ color: running ? C.warning : C.silverDim, fontSize: 11.5, margin: 0, fontWeight: running ? 700 : 400 }}>
+          {running ? "Em andamento - " + formatClock(props.seconds) : (props.seconds > 0 ? "Pausado - " + formatClock(props.seconds) : "Toque para iniciar")}
         </p>
       </div>
+      <ChevronRight size={16} color={C.silverDim} />
+    </button>
+  );
+}
 
-      <p
-        style={{
-          color: C.white, fontSize: 40, fontWeight: 800, margin: "0 0 16px", textAlign: "center",
-          fontVariantNumeric: "tabular-nums", letterSpacing: 1,
-        }}
-      >
-        {formatClock(seconds)}
-      </p>
+// Tela cheia do cronometro de Cardio. E aberta a partir do menu de perfil
+// ou do botao de atalho, e pode ser fechada a qualquer momento sem parar o
+// tempo -- o estado (seconds/running) vive no AlunoDashboard, entao continua
+// contando mesmo com esta tela fechada.
+function CardioScreen(props) {
+  var seconds = props.seconds;
+  var running = props.running;
+  var stateSaving = useState(false); var saving = stateSaving[0]; var setSaving = stateSaving[1];
+  var stateSaveError = useState(""); var saveError = stateSaveError[0]; var setSaveError = stateSaveError[1];
+  var stateSaveSuccess = useState(""); var saveSuccess = stateSaveSuccess[0]; var setSaveSuccess = stateSaveSuccess[1];
 
-      {locked ? (
-        <p style={{ color: C.success, fontSize: 13, fontWeight: 700, textAlign: "center", margin: 0 }}>
-          Cardio registrado: {formatCardioDuration(seconds)}
-        </p>
-      ) : (
-        <div style={{ display: "flex", gap: 8 }}>
-          <button
-            onClick={props.onStart}
-            disabled={running}
+  async function handleFinish() {
+    setSaving(true);
+    setSaveError("");
+    var result = await props.onFinish();
+    setSaving(false);
+    if (result && result.error) {
+      setSaveError(result.error);
+    } else {
+      setSaveSuccess("Cardio registrado com sucesso!");
+    }
+  }
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: C.bg, zIndex: 90, display: "flex", flexDirection: "column" }}>
+      <PageContainer>
+        <TopBrandBar />
+        <BackButton onClick={props.onClose} />
+
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", paddingTop: 20 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 20 }}>
+            <span style={{ fontSize: 22 }}>🏃</span>
+            <p style={{ color: C.white, fontSize: 17, fontWeight: 800, margin: 0 }}>Cardio / Esteira</p>
+          </div>
+
+          <p
             style={{
-              flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
-              background: running ? C.panelAlt : C.blue, border: "none", borderRadius: 8,
-              color: running ? C.silverDim : C.white, fontSize: 13, fontWeight: 700, padding: "10px 0",
-              cursor: running ? "default" : "pointer",
+              color: C.white, fontSize: 52, fontWeight: 800, margin: "0 0 8px", textAlign: "center",
+              fontVariantNumeric: "tabular-nums", letterSpacing: 1,
             }}
           >
-            <Play size={14} /> Iniciar
-          </button>
-          <button
-            onClick={props.onPause}
-            disabled={!running}
-            style={{
-              flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
-              background: "transparent", border: "1px solid " + (running ? C.warning : C.border), borderRadius: 8,
-              color: running ? C.warning : C.silverDim, fontSize: 13, fontWeight: 700, padding: "10px 0",
-              cursor: running ? "pointer" : "default",
-            }}
-          >
-            <Pause size={14} /> Pausar
-          </button>
-          <button
-            onClick={props.onFinish}
-            disabled={seconds === 0}
-            style={{
-              flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
-              background: "transparent", border: "1px solid " + (seconds > 0 ? C.danger : C.border), borderRadius: 8,
-              color: seconds > 0 ? C.danger : C.silverDim, fontSize: 13, fontWeight: 700, padding: "10px 0",
-              cursor: seconds > 0 ? "pointer" : "default",
-            }}
-          >
-            <Square size={14} /> Finalizar
-          </button>
+            {formatClock(seconds)}
+          </p>
+          <p style={{ color: C.silverDim, fontSize: 12.5, margin: "0 0 28px" }}>
+            {running ? "Cronometro em andamento" : (seconds > 0 ? "Cronometro pausado" : "Pronto para comecar")}
+          </p>
+
+          {saveError ? <p style={{ color: C.danger, fontSize: 12.5, margin: "0 0 12px" }}>{saveError}</p> : null}
+          {saveSuccess ? <p style={{ color: C.success, fontSize: 12.5, margin: "0 0 12px" }}>{saveSuccess}</p> : null}
+
+          <div style={{ width: "100%", maxWidth: 340, display: "flex", gap: 10 }}>
+            <button
+              onClick={props.onStart}
+              disabled={running}
+              style={{
+                flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6,
+                background: running ? C.panelAlt : C.blue, border: "none", borderRadius: 12,
+                color: running ? C.silverDim : C.white, fontSize: 12.5, fontWeight: 700, padding: "16px 0",
+                cursor: running ? "default" : "pointer",
+              }}
+            >
+              <Play size={20} /> Iniciar
+            </button>
+            <button
+              onClick={props.onPause}
+              disabled={!running}
+              style={{
+                flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6,
+                background: "transparent", border: "1px solid " + (running ? C.warning : C.border), borderRadius: 12,
+                color: running ? C.warning : C.silverDim, fontSize: 12.5, fontWeight: 700, padding: "16px 0",
+                cursor: running ? "pointer" : "default",
+              }}
+            >
+              <Pause size={20} /> Pausar
+            </button>
+            <button
+              onClick={handleFinish}
+              disabled={seconds === 0 || saving}
+              style={{
+                flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6,
+                background: "transparent", border: "1px solid " + (seconds > 0 ? C.danger : C.border), borderRadius: 12,
+                color: seconds > 0 ? C.danger : C.silverDim, fontSize: 12.5, fontWeight: 700, padding: "16px 0",
+                cursor: seconds > 0 ? "pointer" : "default", opacity: saving ? 0.7 : 1,
+              }}
+            >
+              {saving ? <Spinner size={20} /> : <Square size={20} />} Finalizar
+            </button>
+          </div>
+
+          <p style={{ color: C.silverDim, fontSize: 11.5, textAlign: "center", marginTop: 22, lineHeight: 1.5 }}>
+            Voce pode fechar esta tela para ver seus exercicios ou o historico -- o cronometro continua contando normalmente.
+          </p>
         </div>
-      )}
+      </PageContainer>
     </div>
   );
 }
@@ -1029,7 +1087,7 @@ function CompletedDayView(props) {
             <Timer size={18} color={C.warning} />
           </div>
           <p style={{ color: C.white, fontSize: 13.5, margin: 0 }}>
-            Cardio: <b style={{ color: C.warning }}>{formatCardioDuration(record.cardio_seconds)}</b>
+            Cardio realizado: <b style={{ color: C.warning }}>{formatCardioDuration(record.cardio_seconds)}</b>
           </p>
         </div>
       ) : null}
@@ -1307,8 +1365,9 @@ function CategoryHeading(props) {
 }
 
 // Painel do aluno. So enxerga exercicios com is_published = true.
-// Cabecalho de perfil abre um menu (Historico / Dados Pessoais).
-// Cronometro de Cardio fica visivel sempre que o dia selecionado e hoje.
+// Cardio agora e totalmente independente do treino de musculacao: fica
+// acessivel pelo Menu de Perfil e por um botao de atalho sempre visivel,
+// em qualquer dia selecionado -- nao apenas em "hoje".
 function AlunoDashboard(props) {
   var weekDays = buildWeekDays(new Date());
   var today = new Date();
@@ -1333,12 +1392,12 @@ function AlunoDashboard(props) {
   var stateShowProfileMenu = useState(false); var showProfileMenu = stateShowProfileMenu[0]; var setShowProfileMenu = stateShowProfileMenu[1];
   var stateShowPersonalData = useState(false); var showPersonalData = stateShowPersonalData[0]; var setShowPersonalData = stateShowPersonalData[1];
 
-  // Estado do cronometro de Cardio -- fica no AlunoDashboard (nao dentro do
-  // CardioTimer) exatamente para continuar contando mesmo que o aluno
-  // navegue/role a tela, ja que o componente pai nunca e desmontado.
+  // Cardio e totalmente separado do fluxo de treino: tela propria
+  // (showCardioScreen), estado proprio que persiste mesmo com a tela
+  // fechada, e salvamento imediato (nao depende de "Finalizar Treino").
+  var stateShowCardioScreen = useState(false); var showCardioScreen = stateShowCardioScreen[0]; var setShowCardioScreen = stateShowCardioScreen[1];
   var stateCardioSeconds = useState(0); var cardioSeconds = stateCardioSeconds[0]; var setCardioSeconds = stateCardioSeconds[1];
   var stateCardioRunning = useState(false); var cardioRunning = stateCardioRunning[0]; var setCardioRunning = stateCardioRunning[1];
-  var stateCardioLocked = useState(false); var cardioLocked = stateCardioLocked[0]; var setCardioLocked = stateCardioLocked[1];
 
   var stateStartedAt = useState(student.workout_started_at || null);
   var startedAt = stateStartedAt[0]; var setStartedAt = stateStartedAt[1];
@@ -1350,8 +1409,9 @@ function AlunoDashboard(props) {
   var selectedDate = stateSelectedDate[0]; var setSelectedDate = stateSelectedDate[1];
 
   // Cronometro: enquanto cardioRunning for true, incrementa 1 segundo por
-  // tick. O useEffect e recriado quando cardioRunning muda, mas o valor
-  // acumulado (cardioSeconds) persiste no estado do componente pai.
+  // tick. O estado vive aqui no AlunoDashboard (nao dentro da tela de
+  // Cardio), entao continua contando mesmo que a tela de cronometro seja
+  // fechada para o aluno olhar exercicios ou o historico.
   useEffect(function () {
     if (!cardioRunning) return;
     var intervalId = setInterval(function () {
@@ -1366,14 +1426,53 @@ function AlunoDashboard(props) {
   function pauseCardio() {
     setCardioRunning(false);
   }
-  function finishCardio() {
+
+  // Salva o cardio IMEDIATAMENTE ao clicar em "Finalizar" -- independente
+  // do treino de musculacao. Se ja existe um registro de hoje em
+  // workout_history, so atualiza cardio_seconds (preserva summary_data e o
+  // resto). Se nao existe, cria um registro novo com summary_data vazio.
+  async function finishAndSaveCardio() {
+    var secondsToSave = cardioSeconds;
+    if (secondsToSave === 0) return { error: null };
+
+    var todayDateStr = toDateOnlyString(today);
+    var existing = findHistoryForDate(historyRecords, today);
+    var result;
+
+    if (existing) {
+      result = await supabase
+        .from("workout_history")
+        .update({ cardio_seconds: secondsToSave })
+        .eq("id", existing.id)
+        .select();
+    } else {
+      result = await supabase
+        .from("workout_history")
+        .insert([{
+          student_id: student.id,
+          workout_date: todayDateStr,
+          summary_data: [],
+          cardio_seconds: secondsToSave,
+        }])
+        .select();
+    }
+
+    if (result.error) {
+      return { error: "Nao foi possivel salvar o cardio: " + result.error.message };
+    }
+
+    if (result.data && result.data[0]) {
+      var savedRecord = result.data[0];
+      setHistoryRecords(function (prev) {
+        var withoutOld = prev.filter(function (r) { return r.id !== savedRecord.id; });
+        return [savedRecord].concat(withoutOld);
+      });
+    }
+
     setCardioRunning(false);
-    setCardioLocked(true);
-  }
-  function resetCardio() {
     setCardioSeconds(0);
-    setCardioRunning(false);
-    setCardioLocked(false);
+
+    return { error: null };
   }
 
   // So busca exercicios PUBLICADOS -- rascunhos do professor ficam invisiveis.
@@ -1499,9 +1598,10 @@ function AlunoDashboard(props) {
 
   // Deduplicacao: upsert por (student_id, workout_date). O peso final de
   // cada exercicio (o que o aluno digitou, ou o planejado se nao alterou)
-  // e capturado no snapshot salvo em summary_data. O tempo acumulado no
-  // cronometro de Cardio (running ou pausado, tanto faz) e enviado junto
-  // como cardio_seconds.
+  // e capturado no snapshot salvo em summary_data. O cardio NAO e mais
+  // enviado aqui -- ele e salvo separadamente, na hora, pela tela propria.
+  // Como o payload nao inclui cardio_seconds, o upsert preserva o valor
+  // que ja estiver la (se o aluno ja tiver registrado cardio hoje).
   async function finishWorkout() {
     if (finishing) return;
     setFinishing(true);
@@ -1521,7 +1621,6 @@ function AlunoDashboard(props) {
     });
 
     var todayDateStr = toDateOnlyString(today);
-    var cardioToSave = cardioSeconds > 0 ? cardioSeconds : null;
 
     var writeResult = await supabase
       .from("workout_history")
@@ -1530,7 +1629,6 @@ function AlunoDashboard(props) {
           student_id: student.id,
           workout_date: todayDateStr,
           summary_data: snapshot,
-          cardio_seconds: cardioToSave,
           created_at: new Date().toISOString(),
         }],
         { onConflict: "student_id,workout_date" }
@@ -1553,7 +1651,6 @@ function AlunoDashboard(props) {
     }
 
     setForceView(false);
-    resetCardio();
 
     var idsToReset = list.map(function (ex) { return ex.id; });
     resetTodayWorkoutSilently(idsToReset);
@@ -1615,6 +1712,14 @@ function AlunoDashboard(props) {
         {formatFriendlyDate(selectedDate)}
       </p>
 
+      {/* Botao de atalho de Cardio: visivel em qualquer dia, independente
+          do treino de musculacao. */}
+      <CardioQuickButton
+        seconds={cardioSeconds}
+        running={cardioRunning}
+        onClick={function () { setShowCardioScreen(true); }}
+      />
+
       {loading ? (
         <p style={{ color: C.silverDim, fontSize: 13, textAlign: "center", padding: "20px 0" }}>Carregando...</p>
       ) : showCompletedView ? (
@@ -1626,17 +1731,6 @@ function AlunoDashboard(props) {
         />
       ) : (
         <div>
-          {isToday ? (
-            <CardioTimer
-              seconds={cardioSeconds}
-              running={cardioRunning}
-              locked={cardioLocked}
-              onStart={startCardio}
-              onPause={pauseCardio}
-              onFinish={finishCardio}
-            />
-          ) : null}
-
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
             <Flame size={16} color={C.blue} />
             <h2 style={{ color: C.white, fontSize: 16, fontWeight: 800, margin: 0 }}>
@@ -1720,9 +1814,23 @@ function AlunoDashboard(props) {
         <ProfileMenuModal
           name={student.name}
           avatarUrl={student.avatar_url}
+          cardioRunning={cardioRunning}
+          cardioSeconds={cardioSeconds}
           onClose={function () { setShowProfileMenu(false); }}
+          onSelectCardio={function () { setShowProfileMenu(false); setShowCardioScreen(true); }}
           onSelectHistory={function () { setShowProfileMenu(false); setShowMonthly(true); }}
           onSelectPersonalData={function () { setShowProfileMenu(false); setShowPersonalData(true); }}
+        />
+      ) : null}
+
+      {showCardioScreen ? (
+        <CardioScreen
+          seconds={cardioSeconds}
+          running={cardioRunning}
+          onStart={startCardio}
+          onPause={pauseCardio}
+          onFinish={finishAndSaveCardio}
+          onClose={function () { setShowCardioScreen(false); }}
         />
       ) : null}
     </PageContainer>
