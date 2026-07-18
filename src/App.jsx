@@ -64,6 +64,7 @@ var C = {
   border: "#2a3542",
   silverDim: "#8b98a5",
   blue: "#2f86c6",
+  weightBlue: "#60a5fa",
   blueDim: "#1d5a8c",
   blueDeep: "#123a5c",
   white: "#f3f5f7",
@@ -154,6 +155,7 @@ function buildWeekDays(referenceDate) {
   return days;
 }
 
+// Grid de calendario mensal, sempre comecando na segunda-feira (5 ou 6 semanas).
 function buildMonthCells(baseDate) {
   var year = baseDate.getFullYear();
   var month = baseDate.getMonth();
@@ -183,6 +185,9 @@ function findHistoryForDate(records, date) {
   return null;
 }
 
+// Busca a carga anterior (mais recente antes de beforeDate) do mesmo
+// exercicio pelo nome, para deteccao de evolucao. Continua funcionando
+// normalmente com o novo campo de peso, ja que compara por item.weight.
 function getPreviousWeight(historyRecords, exerciseName, beforeDate) {
   var candidates = historyRecords
     .filter(function (r) { return new Date(r.created_at).getTime() < beforeDate.getTime() && r.summary_data; })
@@ -229,6 +234,7 @@ function pickRandomPhrase() {
   return INCENTIVE_PHRASES[i];
 }
 
+// Titulo dinamico da secao de exercicios, conforme o dia selecionado.
 function getSectionTitle(isPast, isToday, dayKey) {
   if (isPast) return "Relatorio do Dia";
   if (isToday) return "Treino de Hoje";
@@ -551,7 +557,7 @@ function StudentPicker(props) {
             var histDate = new Date(history.created_at);
             isToday = isSameDate(histDate, new Date());
             historyLabel = isToday
-              ? "Concluiu o Treino hoje"
+              ? "Concluiu o treino de hoje"
               : "Ultimo treino: " + formatFriendlyDate(histDate);
           }
           return (
@@ -658,6 +664,9 @@ function WeekCircleRow(props) {
   );
 }
 
+// Resumo do treino finalizado. Layout da lista: nome a esquerda, carga
+// em destaque (azul #60a5fa, negrito, "KG") a direita. Evolucao continua
+// comparando o novo campo de peso com a ocorrencia anterior.
 function CompletedDayView(props) {
   var record = props.record;
   var allRecords = props.allRecords || [];
@@ -697,25 +706,18 @@ function CompletedDayView(props) {
               }
             }
             return (
-              <div key={idx} style={{ background: C.panel, border: "1px solid " + (showEvolution ? C.success : C.border), borderRadius: 8, padding: "10px", marginBottom: "8px" }}>
+              <div key={idx} style={{ background: C.panel, border: "1px solid " + (showEvolution ? C.success : C.border), borderRadius: 8, padding: "10px 12px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <div style={{ display: "flex", flexDirection: "column" }}>
-                    <span style={{ color: C.white, fontSize: 13, fontWeight: '500' }}>{item.name}</span>
-                    <span style={{ color: C.silverDim, fontSize: 10, textTransform: 'uppercase' }}>Exercício</span>
-                  </div>
-                  <div style={{ textAlign: "right", display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
-                    <div style={{ display: "flex", alignItems: "baseline" }}>
-                      <span style={{ color: "#60a5fa", fontSize: 16, fontWeight: 'bold' }}>{item.weight || '-'}</span>
-                      <span style={{ color: "#60a5fa", opacity: 0.7, fontSize: 10, fontWeight: 'bold', marginLeft: 2 }}>KG</span>
-                    </div>
-                    <span style={{ color: C.silverDim, fontSize: 9, textTransform: 'uppercase' }}>Carga</span>
-                  </div>
+                  <span style={{ color: C.white, fontSize: 13 }}>{item.name}</span>
+                  <span style={{ color: C.weightBlue, fontSize: 14, fontWeight: 800 }}>
+                    {item.weight ? item.weight + "KG" : "-"}
+                  </span>
                 </div>
-                {showEvolution && (
-                  <p style={{ color: C.success, fontSize: 11, fontWeight: 700, margin: "6px 0 0" }}>
-                    🔥 Evolução! Você aumentou a carga neste aparelho
+                {showEvolution ? (
+                  <p style={{ color: C.success, fontSize: 11.5, fontWeight: 700, margin: "4px 0 0" }}>
+                    🔥 Evolucao! Voce aumentou a carga neste aparelho
                   </p>
-                )}
+                ) : null}
               </div>
             );
           })}
@@ -885,11 +887,13 @@ function ExerciseDetailModal(props) {
   );
 }
 
+// Card interativo do aluno. Mostra a carga planejada pelo professor
+// (ex.weight) e permite ajustar o valor usado no treino de hoje.
 function ExerciseCard(props) {
   var ex = props.ex;
   var stateImgError = useState(false); var imgError = stateImgError[0]; var setImgError = stateImgError[1];
   var checked = !!ex.is_completed;
-  var displayWeight = props.weight !== undefined ? props.weight : (ex.weight || "");
+  var currentWeightValue = props.weight !== undefined ? props.weight : (ex.weight != null ? String(ex.weight) : "");
 
   return (
     <div style={{ background: checked ? "rgba(47,134,198,0.08)" : C.panel, border: "1px solid " + (checked ? C.blueDim : C.border), borderRadius: 14, overflow: "hidden" }}>
@@ -908,14 +912,19 @@ function ExerciseCard(props) {
           <p style={{ color: C.white, fontSize: 14, fontWeight: 700, margin: "0 0 4px", textDecoration: checked ? "line-through" : "none", opacity: checked ? 0.6 : 1 }}>
             {ex.name}
           </p>
-          <p style={{ color: C.silverDim, fontSize: 12.5, margin: "0 0 8px" }}>{ex.sets} series x {ex.reps} reps</p>
+          <p style={{ color: C.silverDim, fontSize: 12.5, margin: "0 0 6px" }}>{ex.sets} series x {ex.reps} reps</p>
+          {ex.weight != null ? (
+            <p style={{ color: C.silverDim, fontSize: 11.5, margin: "0 0 8px" }}>
+              Carga planejada: <span style={{ color: C.weightBlue, fontWeight: 700 }}>{ex.weight}KG</span>
+            </p>
+          ) : null}
           <div style={{ display: "flex", alignItems: "center", gap: 6 }} onClick={function (e) { e.stopPropagation(); }}>
-            <label style={{ color: C.silverDim, fontSize: 12 }}>Carga</label>
+            <label style={{ color: C.silverDim, fontSize: 12 }}>Carga usada</label>
             <input
-              type="text" placeholder="0"
-              value={displayWeight}
+              type="number" inputMode="decimal" placeholder="0"
+              value={currentWeightValue}
               onChange={function (e) { props.onWeightChange(ex.id, e.target.value); }}
-              style={{ width: 65, background: C.bg, border: "1px solid " + C.border, borderRadius: 6, color: C.white, fontSize: 13, padding: "4px 6px", outline: "none" }}
+              style={{ width: 56, background: C.bg, border: "1px solid " + C.border, borderRadius: 6, color: C.white, fontSize: 13, padding: "4px 6px", outline: "none" }}
             />
             <span style={{ color: C.silverDim, fontSize: 12 }}>kg</span>
           </div>
@@ -953,12 +962,17 @@ function LockedExerciseCard(props) {
       <div style={{ padding: 12 }}>
         <p style={{ color: C.white, fontSize: 13.5, fontWeight: 700, margin: "0 0 3px" }}>{ex.name}</p>
         <p style={{ color: C.silverDim, fontSize: 12, margin: 0 }}>{ex.sets} series x {ex.reps} reps</p>
-        {ex.weight && <p style={{ color: C.blue, fontSize: 12, fontWeight: 700, margin: "4px 0 0" }}>Carga Planejada: {ex.weight} kg</p>}
+        {ex.weight != null ? (
+          <p style={{ color: C.silverDim, fontSize: 11.5, margin: "3px 0 0" }}>
+            Carga planejada: <span style={{ color: C.weightBlue, fontWeight: 700 }}>{ex.weight}KG</span>
+          </p>
+        ) : null}
       </div>
     </div>
   );
 }
 
+// Painel do aluno.
 function AlunoDashboard(props) {
   var student = props.student;
   var weekDays = buildWeekDays(new Date());
@@ -1087,6 +1101,9 @@ function AlunoDashboard(props) {
     }
   }
 
+  // Deduplicacao: upsert por (student_id, workout_date), com indice unico
+  // no banco. O peso final de cada exercicio (o que o aluno digitou, ou o
+  // planejado se ele nao alterou) e capturado no snapshot salvo em summary_data.
   async function finishWorkout() {
     if (finishing) return;
     setFinishing(true);
@@ -1095,12 +1112,13 @@ function AlunoDashboard(props) {
     var list = plannedList;
     var snapshot = list.map(function (ex) {
       var key = student.id + "-" + selectedDayKey + "-" + ex.id;
+      var finalWeight = weights[key] !== undefined ? weights[key] : (ex.weight != null ? ex.weight : null);
       return {
         name: ex.name,
         sets: ex.sets,
         reps: ex.reps,
         completed: !!ex.is_completed,
-        weight: weights[key] !== undefined ? weights[key] : (ex.weight || null),
+        weight: finalWeight,
       };
     });
 
@@ -1150,7 +1168,7 @@ function AlunoDashboard(props) {
     var highlighted = hasHist || dIsToday;
     var color = hasHist ? C.success : C.blue;
     return {
-      key: DAY_TABS_LOOKUP[i],
+      key: DAY_TABS[i].key,
       topLabel: DAY_TABS[i].label,
       circleText: d.getDate(),
       highlighted: highlighted,
@@ -1159,8 +1177,6 @@ function AlunoDashboard(props) {
       onClick: function () { selectDate(d); },
     };
   });
-  
-  var DAY_TABS_LOOKUP = ["segunda", "terca", "quarta", "quinta", "sexta", "sabado", "domingo"];
 
   var showCompletedView = historyForSelectedDate && !forceView && !loading;
   var sectionTitle = getSectionTitle(isPast, isToday, selectedDayKey);
@@ -1287,13 +1303,15 @@ function AlunoDashboard(props) {
   );
 }
 
+// Linha de exercicio no painel do professor (sem etiqueta A/B/C).
+// Inclui campo de Carga (peso planejado), salvo em exercises.weight.
 function ProfessorExerciseRow(props) {
   var ex = props.ex;
   var stateEditing = useState(false); var editing = stateEditing[0]; var setEditing = stateEditing[1];
   var stateName = useState(ex.name); var name = stateName[0]; var setName = stateName[1];
   var stateSets = useState(String(ex.sets)); var sets = stateSets[0]; var setSets = stateSets[1];
   var stateReps = useState(ex.reps); var reps = stateReps[0]; var setReps = stateReps[1];
-  var stateWeight = useState(ex.weight || ""); var weight = stateWeight[0]; var setWeight = stateWeight[1];
+  var stateWeight = useState(ex.weight != null ? String(ex.weight) : ""); var weight = stateWeight[0]; var setWeight = stateWeight[1];
   var stateImage = useState(ex.image || ""); var image = stateImage[0]; var setImage = stateImage[1];
   var stateImage2 = useState(ex.image2 || ""); var image2 = stateImage2[0]; var setImage2 = stateImage2[1];
   var stateNotes = useState(ex.notes || ""); var notes = stateNotes[0]; var setNotes = stateNotes[1];
@@ -1302,7 +1320,7 @@ function ProfessorExerciseRow(props) {
     setName(ex.name);
     setSets(String(ex.sets));
     setReps(ex.reps);
-    setWeight(ex.weight || "");
+    setWeight(ex.weight != null ? String(ex.weight) : "");
     setImage(ex.image || "");
     setImage2(ex.image2 || "");
     setNotes(ex.notes || "");
@@ -1315,7 +1333,7 @@ function ProfessorExerciseRow(props) {
       name: name.trim(),
       sets: Number(sets) || 1,
       reps: reps.trim() || "-",
-      weight: weight.trim(),
+      weight: weight.trim() !== "" ? Number(weight.replace(",", ".")) : null,
       image: image.trim() || IMG_GERAL,
       image2: image2.trim() || null,
       notes: notes.trim() || null,
@@ -1330,7 +1348,7 @@ function ProfessorExerciseRow(props) {
         <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
           <input type="number" placeholder="Series" value={sets} onChange={function (e) { setSets(e.target.value); }} style={Object.assign({}, plainInputStyle, { width: 70 })} />
           <input type="text" placeholder="Repeticoes" value={reps} onChange={function (e) { setReps(e.target.value); }} style={Object.assign({}, plainInputStyle, { flex: 1 })} />
-          <input type="text" placeholder="Carga" value={weight} onChange={function (e) { setWeight(e.target.value); }} style={Object.assign({}, plainInputStyle, { width: 80 })} />
+          <input type="number" placeholder="Carga (kg)" value={weight} onChange={function (e) { setWeight(e.target.value); }} style={Object.assign({}, plainInputStyle, { width: 90 })} />
         </div>
         <input type="text" placeholder="URL da foto 1" value={image} onChange={function (e) { setImage(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })} />
         <input type="text" placeholder="URL da foto 2" value={image2} onChange={function (e) { setImage2(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })} />
@@ -1351,14 +1369,17 @@ function ProfessorExerciseRow(props) {
         <img src={ex.image || IMG_GERAL} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <p style={{ color: C.white, fontSize: 13.5, fontWeight: 700, margin: "0 0 2px" }}>{ex.name}</p>
-        <p style={{ color: C.silverDim, fontSize: 12, margin: 0 }}>{ex.sets} series x {ex.reps} reps</p>
-        {ex.weight && <p style={{ color: C.blue, fontSize: 11, fontWeight: 800, margin: "2px 0 0" }}>Carga Planejada: {ex.weight} kg</p>}
+        <p style={{ color: C.white, fontSize: 13.5, fontWeight: 700, margin: 0 }}>{ex.name}</p>
+        <p style={{ color: C.silverDim, fontSize: 12, margin: 0 }}>
+          {ex.sets} series x {ex.reps} reps
+          {ex.weight != null ? <span style={{ color: C.weightBlue, fontWeight: 700 }}> - {ex.weight}KG</span> : null}
+        </p>
+        {ex.notes ? <p style={{ color: C.silverDim, fontSize: 11, margin: "2px 0 0", fontStyle: "italic" }}>{ex.notes}</p> : null}
       </div>
-      <button onClick={function () { setEditing(true); }} aria-label="Editar" style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid " + C.border, background: "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>
+      <button onClick={function () { setEditing(true); }} aria-label="Editar exercicio" style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid " + C.border, background: "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>
         <Pencil size={14} color={C.blue} />
       </button>
-      <button onClick={function () { props.onDelete(ex.id); }} aria-label="Excluir" style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid " + C.border, background: "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>
+      <button onClick={function () { props.onDelete(ex.id); }} aria-label="Excluir exercicio" style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid " + C.border, background: "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>
         <Trash2 size={15} color={C.danger} />
       </button>
     </div>
@@ -1374,12 +1395,14 @@ function RecentHistoryList(props) {
   }
   return (
     <div style={{ marginBottom: 18 }}>
-      <p style={{ color: C.silverDim, fontSize: 11.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>Ultimos Treinos Concluidos</p>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+        <p style={{ color: C.silverDim, fontSize: 11.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, margin: 0 }}>Ultimos Treinos Concluidos</p>
+      </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         {props.records.slice(0, 5).map(function (r) {
           return (
             <div key={r.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: C.panel, border: "1px solid " + C.border, borderRadius: 8, padding: "8px 10px" }}>
-              <span style={{ color: C.white, fontSize: 12.5, fontWeight: 700 }}>Treino Concluido</span>
+              <span style={{ color: C.white, fontSize: 12.5, fontWeight: 700 }}>Treino concluido</span>
               <span style={{ color: C.silverDim, fontSize: 11.5 }}>{formatFriendlyDate(r.created_at)}</span>
             </div>
           );
@@ -1455,6 +1478,9 @@ function LibraryManager(props) {
         <p style={{ color: C.silverDim, fontSize: 13, textAlign: "center" }}>Carregando biblioteca...</p>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {items.length === 0 ? (
+            <p style={{ color: C.silverDim, fontSize: 13, textAlign: "center" }}>Nenhum exercicio na biblioteca ainda.</p>
+          ) : null}
           {items.map(function (it) {
             return (
               <div key={it.id} style={{ display: "flex", alignItems: "center", gap: 10, background: C.panel, border: "1px solid " + C.border, borderRadius: 12, padding: "10px 12px" }}>
@@ -1465,7 +1491,7 @@ function LibraryManager(props) {
                   <p style={{ color: C.white, fontSize: 13, fontWeight: 700, margin: 0 }}>{it.name}</p>
                   {it.category ? <p style={{ color: C.silverDim, fontSize: 11.5, margin: 0 }}>{it.category}</p> : null}
                 </div>
-                <button onClick={function () { deleteItem(it.id); }} aria-label="Excluir" style={{ width: 30, height: 30, borderRadius: 8, border: "1px solid " + C.border, background: "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>
+                <button onClick={function () { deleteItem(it.id); }} aria-label="Excluir da biblioteca" style={{ width: 30, height: 30, borderRadius: 8, border: "1px solid " + C.border, background: "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>
                   <Trash2 size={14} color={C.danger} />
                 </button>
               </div>
@@ -1477,6 +1503,9 @@ function LibraryManager(props) {
   );
 }
 
+// Painel do professor: dia PASSADO -> so historico/mensagem, sem formulario.
+// Dia de HOJE ou FUTURO -> planejamento normal (sem selecao A/B/C, com
+// campo de Carga que grava em exercises.weight).
 function ProfessorPanel(props) {
   var stateMode = useState("students"); var mode = stateMode[0]; var setMode = stateMode[1];
   var stateStudents = useState([]); var students = stateStudents[0]; var setStudents = stateStudents[1];
@@ -1614,7 +1643,7 @@ function ProfessorPanel(props) {
     var highlighted = hasHist || dIsToday;
     var color = hasHist ? C.success : C.blue;
     return {
-      key: ["segunda", "terca", "quarta", "quinta", "sexta", "sabado", "domingo"][i],
+      key: DAY_TABS[i].key,
       topLabel: DAY_TABS[i].label,
       circleText: d.getDate(),
       highlighted: highlighted,
@@ -1623,10 +1652,6 @@ function ProfessorPanel(props) {
       onClick: function () { setSelectedDate(d); },
     };
   });
-  
-  var DAY_TABS = [
-    { label: "S" }, { label: "T" }, { label: "Q" }, { label: "Q" }, { label: "S" }, { label: "S" }, { label: "D" }
-  ];
 
   function handleLibrarySelect(id) {
     setLibrarySelectId(id);
@@ -1647,7 +1672,7 @@ function ProfessorPanel(props) {
       name: newName.trim(),
       sets: Number(newSets) || 1,
       reps: newReps.trim() || "-",
-      weight: newWeight.trim(),
+      weight: newWeight.trim() !== "" ? Number(newWeight.replace(",", ".")) : null,
       image: newImage.trim() || IMG_GERAL,
       image2: newImage2.trim() || null,
       notes: newNotes.trim() || null,
@@ -1733,7 +1758,7 @@ function ProfessorPanel(props) {
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
               {list.length === 0 ? (
-                <p style={{ color: C.silverDim, fontSize: 13, textAlign: "center", padding: "12px 0" }}>Nenhum exercicio agendado. Adicione abaixo.</p>
+                <p style={{ color: C.silverDim, fontSize: 13, textAlign: "center", padding: "12px 0" }}>Nenhum exercicio agendado para {DAY_FULL_LABEL[selectedDayKey]}. Adicione abaixo.</p>
               ) : null}
               {list.map(function (ex) {
                 return (
@@ -1758,13 +1783,7 @@ function ProfessorPanel(props) {
               <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
                 <input type="number" placeholder="Series" value={newSets} onChange={function (e) { setNewSets(e.target.value); }} style={Object.assign({}, plainInputStyle, { width: 70 })} />
                 <input type="text" placeholder="Repeticoes (ex: 10-12)" value={newReps} onChange={function (e) { setNewReps(e.target.value); }} style={Object.assign({}, plainInputStyle, { flex: 1 })} />
-                <input 
-                  type="text" 
-                  placeholder="Carga (kg)" 
-                  value={newWeight} 
-                  onChange={function (e) { setNewWeight(e.target.value); }} 
-                  style={Object.assign({}, plainInputStyle, { width: 85 })} 
-                />
+                <input type="number" placeholder="Carga (kg)" value={newWeight} onChange={function (e) { setNewWeight(e.target.value); }} style={Object.assign({}, plainInputStyle, { width: 90 })} />
               </div>
               <input type="text" placeholder="URL da foto 1" value={newImage} onChange={function (e) { setNewImage(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })} />
               <input type="text" placeholder="URL da foto 2 (opcional)" value={newImage2} onChange={function (e) { setNewImage2(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })} />
