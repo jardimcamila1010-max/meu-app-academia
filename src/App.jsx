@@ -24,6 +24,8 @@ import {
   Coffee,
   Rocket,
   FileEdit,
+  MapPin,
+  KeyRound,
 } from "lucide-react";
 import { supabase } from "./supabaseClient.js";
 
@@ -316,27 +318,41 @@ function IconField(props) {
         value={props.value}
         onChange={props.onChange}
         style={inputStyle}
-        required
+        required={props.required}
       />
     </div>
   );
 }
 
+// Avatar com foto de perfil (avatar_url). Se nao houver src ou o link
+// quebrar, cai automaticamente para as iniciais do nome (padrao anterior).
 function Avatar(props) {
   var size = props.size || 40;
+  var stateError = useState(false); var imgError = stateError[0]; var setImgError = stateError[1];
   var parts = (props.name || "").split(" ");
   var initials = ((parts[0] ? parts[0][0] : "") + (parts[1] ? parts[1][0] : "")).toUpperCase();
+  var showImage = !!(props.src && props.src.trim()) && !imgError;
+
   return (
     <div
       style={{
         width: size, height: size, borderRadius: "50%",
-        background: "linear-gradient(135deg, " + C.blueDim + ", " + C.blueDeep + ")",
+        background: showImage ? C.panelAlt : "linear-gradient(135deg, " + C.blueDim + ", " + C.blueDeep + ")",
         display: "flex", alignItems: "center", justifyContent: "center",
         color: C.white, fontWeight: 700, fontSize: size * 0.38,
-        border: "1px solid " + C.border, flexShrink: 0,
+        border: "1px solid " + C.border, flexShrink: 0, overflow: "hidden",
       }}
     >
-      {initials}
+      {showImage ? (
+        <img
+          src={props.src}
+          alt={props.name || ""}
+          onError={function () { setImgError(true); }}
+          style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+        />
+      ) : (
+        initials
+      )}
     </div>
   );
 }
@@ -485,8 +501,8 @@ function LoginScreen(props) {
       <BackButton onClick={props.onBack} />
       <Logo small />
       <form onSubmit={submit} style={{ width: "100%", maxWidth: 340 }}>
-        <IconField icon={<Mail size={16} />} type="email" placeholder="E-mail" value={email} onChange={function (e) { setEmail(e.target.value); }} />
-        <IconField icon={<Lock size={16} />} type="password" placeholder="Senha" value={password} onChange={function (e) { setPassword(e.target.value); }} />
+        <IconField icon={<Mail size={16} />} type="email" placeholder="E-mail" value={email} onChange={function (e) { setEmail(e.target.value); }} required />
+        <IconField icon={<Lock size={16} />} type="password" placeholder="Senha" value={password} onChange={function (e) { setPassword(e.target.value); }} required />
 
         {error ? <p style={{ color: C.danger, fontSize: 12.5, margin: "0 0 10px" }}>{error}</p> : null}
 
@@ -562,10 +578,10 @@ function SignupScreen(props) {
       <Logo small />
       <p style={{ color: C.silverDim, fontSize: 13, marginBottom: 18, marginTop: -8 }}>Criar sua conta de aluno</p>
       <form onSubmit={submit} style={{ width: "100%", maxWidth: 340 }}>
-        <IconField icon={<UserIcon size={16} />} type="text" placeholder="Nome completo" value={name} onChange={function (e) { setName(e.target.value); }} />
-        <IconField icon={<Phone size={16} />} type="tel" placeholder="Telefone" value={phone} onChange={function (e) { setPhone(e.target.value); }} />
-        <IconField icon={<Mail size={16} />} type="email" placeholder="E-mail" value={email} onChange={function (e) { setEmail(e.target.value); }} />
-        <IconField icon={<Lock size={16} />} type="password" placeholder="Senha" value={password} onChange={function (e) { setPassword(e.target.value); }} />
+        <IconField icon={<UserIcon size={16} />} type="text" placeholder="Nome completo" value={name} onChange={function (e) { setName(e.target.value); }} required />
+        <IconField icon={<Phone size={16} />} type="tel" placeholder="Telefone" value={phone} onChange={function (e) { setPhone(e.target.value); }} required />
+        <IconField icon={<Mail size={16} />} type="email" placeholder="E-mail" value={email} onChange={function (e) { setEmail(e.target.value); }} required />
+        <IconField icon={<Lock size={16} />} type="password" placeholder="Senha" value={password} onChange={function (e) { setPassword(e.target.value); }} required />
 
         {error ? <p style={{ color: C.danger, fontSize: 12.5, margin: "0 0 10px" }}>{error}</p> : null}
         {info ? <p style={{ color: C.blue, fontSize: 12.5, margin: "0 0 10px" }}>{info}</p> : null}
@@ -619,7 +635,7 @@ function StudentPicker(props) {
               onClick={function () { props.onPick(s); }}
               style={{ display: "flex", alignItems: "center", gap: 12, background: C.panel, border: "1px solid " + C.border, borderRadius: 12, padding: "12px 14px", cursor: "pointer", textAlign: "left" }}
             >
-              <Avatar name={s.name} />
+              <Avatar name={s.name} src={s.avatar_url} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <p style={{ color: C.white, fontSize: 15, fontWeight: 600, margin: 0 }}>{s.name}</p>
                 <p style={{ color: isToday ? C.blue : C.silverDim, fontSize: 11.5, margin: "2px 0 0", fontWeight: historyLabel ? 600 : 400 }}>
@@ -670,7 +686,7 @@ function PressableProfileHeader(props) {
         transition: "transform 0.12s ease, background 0.12s ease",
       }}
     >
-      <Avatar name={props.name} size={38} />
+      <Avatar name={props.name} src={props.avatarUrl} size={38} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <p style={{ color: C.white, fontSize: 15, fontWeight: 800, margin: 0 }}>{props.title}</p>
@@ -683,6 +699,173 @@ function PressableProfileHeader(props) {
         ) : null}
       </div>
     </button>
+  );
+}
+
+// Menu que abre ao tocar no cabeçalho de perfil do aluno: escolher entre
+// ver o Historico de Treinos ou editar os Dados Pessoais.
+function ProfileMenuModal(props) {
+  return (
+    <div
+      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 80 }}
+      onClick={props.onClose}
+    >
+      <div
+        onClick={function (e) { e.stopPropagation(); }}
+        style={{ width: "100%", maxWidth: 420, background: C.panel, borderTop: "1px solid " + C.blueDim, borderRadius: "18px 18px 0 0", padding: "20px 18px", paddingBottom: "max(20px, env(safe-area-inset-bottom))" }}
+      >
+        <div style={{ width: 36, height: 4, borderRadius: 2, background: C.border, margin: "0 auto 18px" }} />
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+          <Avatar name={props.name} src={props.avatarUrl} size={44} />
+          <p style={{ color: C.white, fontSize: 15, fontWeight: 800, margin: 0 }}>{props.name}</p>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <button
+            onClick={props.onSelectHistory}
+            style={{ display: "flex", alignItems: "center", gap: 10, background: C.panelAlt, border: "1px solid " + C.border, borderRadius: 12, padding: "14px 14px", color: C.white, fontSize: 14, fontWeight: 700, cursor: "pointer", textAlign: "left" }}
+          >
+            <span style={{ fontSize: 18 }}>📊</span> Historico de Treinos
+          </button>
+          <button
+            onClick={props.onSelectPersonalData}
+            style={{ display: "flex", alignItems: "center", gap: 10, background: C.panelAlt, border: "1px solid " + C.border, borderRadius: 12, padding: "14px 14px", color: C.white, fontSize: 14, fontWeight: 700, cursor: "pointer", textAlign: "left" }}
+          >
+            <span style={{ fontSize: 18 }}>👤</span> Dados Pessoais
+          </button>
+        </div>
+
+        <button
+          onClick={props.onClose}
+          style={{ width: "100%", marginTop: 16, background: "transparent", border: "none", color: C.silverDim, fontSize: 13, fontWeight: 600, padding: "8px 0", cursor: "pointer" }}
+        >
+          Cancelar
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Tela de Dados Pessoais: edicao de Nome, Telefone, Endereco e Foto de
+// Perfil (avatar_url), alem da secao de Seguranca para trocar a senha.
+function PersonalDataScreen(props) {
+  var student = props.student;
+  var stateName = useState(student.name || ""); var name = stateName[0]; var setName = stateName[1];
+  var statePhone = useState(student.phone || ""); var phone = statePhone[0]; var setPhone = statePhone[1];
+  var stateAddress = useState(student.address || ""); var address = stateAddress[0]; var setAddress = stateAddress[1];
+  var stateAvatarUrl = useState(student.avatar_url || ""); var avatarUrl = stateAvatarUrl[0]; var setAvatarUrl = stateAvatarUrl[1];
+
+  var stateSaving = useState(false); var saving = stateSaving[0]; var setSaving = stateSaving[1];
+  var stateSaveError = useState(""); var saveError = stateSaveError[0]; var setSaveError = stateSaveError[1];
+  var stateSaveSuccess = useState(""); var saveSuccess = stateSaveSuccess[0]; var setSaveSuccess = stateSaveSuccess[1];
+
+  var stateNewPassword = useState(""); var newPassword = stateNewPassword[0]; var setNewPassword = stateNewPassword[1];
+  var stateUpdatingPassword = useState(false); var updatingPassword = stateUpdatingPassword[0]; var setUpdatingPassword = stateUpdatingPassword[1];
+  var statePasswordError = useState(""); var passwordError = statePasswordError[0]; var setPasswordError = statePasswordError[1];
+  var statePasswordSuccess = useState(""); var passwordSuccess = statePasswordSuccess[0]; var setPasswordSuccess = statePasswordSuccess[1];
+
+  async function saveProfile() {
+    if (!name.trim() || !phone.trim()) {
+      setSaveError("Nome e telefone sao obrigatorios.");
+      setSaveSuccess("");
+      return;
+    }
+    setSaving(true);
+    setSaveError("");
+    setSaveSuccess("");
+
+    var trimmedAvatar = avatarUrl.trim();
+    var updates = {
+      name: name.trim(),
+      phone: phone.trim(),
+      address: address.trim() || null,
+      avatar_url: trimmedAvatar === "" ? null : trimmedAvatar,
+    };
+
+    var result = await supabase.from("profiles").update(updates).eq("id", student.id).select();
+    setSaving(false);
+
+    if (result.error) {
+      setSaveError("Erro ao salvar: " + result.error.message);
+      return;
+    }
+
+    if (result.data && result.data[0]) {
+      setSaveSuccess("Dados atualizados com sucesso!");
+      props.onSaved(result.data[0]);
+    }
+  }
+
+  async function updatePassword() {
+    if (!newPassword || newPassword.length < 6) {
+      setPasswordError("A senha deve ter pelo menos 6 caracteres.");
+      setPasswordSuccess("");
+      return;
+    }
+    setUpdatingPassword(true);
+    setPasswordError("");
+    setPasswordSuccess("");
+
+    var result = await supabase.auth.updateUser({ password: newPassword });
+    setUpdatingPassword(false);
+
+    if (result.error) {
+      setPasswordError("Erro ao atualizar senha: " + result.error.message);
+      return;
+    }
+
+    setPasswordSuccess("Senha atualizada com sucesso!");
+    setNewPassword("");
+  }
+
+  return (
+    <PageContainer>
+      <TopBrandBar />
+      <BackButton onClick={props.onBack} />
+
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginBottom: 20 }}>
+        <Avatar name={name} src={avatarUrl} size={72} />
+        <p style={{ color: C.white, fontSize: 16, fontWeight: 800, margin: "10px 0 0" }}>Dados Pessoais</p>
+      </div>
+
+      <div style={{ background: C.panel, border: "1px solid " + C.border, borderRadius: 12, padding: 14, marginBottom: 16 }}>
+        <IconField icon={<UserIcon size={16} />} type="text" placeholder="Nome completo" value={name} onChange={function (e) { setName(e.target.value); }} />
+        <IconField icon={<Phone size={16} />} type="tel" placeholder="Telefone" value={phone} onChange={function (e) { setPhone(e.target.value); }} />
+        <IconField icon={<MapPin size={16} />} type="text" placeholder="Endereco" value={address} onChange={function (e) { setAddress(e.target.value); }} />
+        <IconField icon={<ImageIcon size={16} />} type="text" placeholder="URL da foto de perfil" value={avatarUrl} onChange={function (e) { setAvatarUrl(e.target.value); }} />
+
+        {saveError ? <p style={{ color: C.danger, fontSize: 12.5, margin: "0 0 10px" }}>{saveError}</p> : null}
+        {saveSuccess ? <p style={{ color: C.success, fontSize: 12.5, margin: "0 0 10px" }}>{saveSuccess}</p> : null}
+
+        <button
+          onClick={saveProfile}
+          disabled={saving}
+          style={{ width: "100%", background: C.blue, border: "none", borderRadius: 8, color: C.white, fontSize: 14, fontWeight: 700, padding: "12px 0", cursor: "pointer", opacity: saving ? 0.7 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
+        >
+          {saving ? <Spinner size={15} /> : null}
+          {saving ? "Salvando..." : "Salvar Alteracoes"}
+        </button>
+      </div>
+
+      <div style={{ background: C.panel, border: "1px solid " + C.border, borderRadius: 12, padding: 14 }}>
+        <p style={{ color: C.silverDim, fontSize: 11.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, margin: "0 0 10px", display: "flex", alignItems: "center", gap: 6 }}>
+          <KeyRound size={13} /> Seguranca
+        </p>
+        <IconField icon={<Lock size={16} />} type="password" placeholder="Nova senha" value={newPassword} onChange={function (e) { setNewPassword(e.target.value); }} />
+
+        {passwordError ? <p style={{ color: C.danger, fontSize: 12.5, margin: "0 0 10px" }}>{passwordError}</p> : null}
+        {passwordSuccess ? <p style={{ color: C.success, fontSize: 12.5, margin: "0 0 10px" }}>{passwordSuccess}</p> : null}
+
+        <button
+          onClick={updatePassword}
+          disabled={updatingPassword}
+          style={{ width: "100%", background: C.panelAlt, border: "1px solid " + C.blueDim, borderRadius: 8, color: C.white, fontSize: 14, fontWeight: 700, padding: "12px 0", cursor: "pointer", opacity: updatingPassword ? 0.7 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
+        >
+          {updatingPassword ? <Spinner size={15} /> : null}
+          {updatingPassword ? "Atualizando..." : "Atualizar Senha"}
+        </button>
+      </div>
+    </PageContainer>
   );
 }
 
@@ -1017,12 +1200,17 @@ function CategoryHeading(props) {
 }
 
 // Painel do aluno. So enxerga exercicios com is_published = true.
-// Se o professor ainda esta editando (rascunho), o aluno ve "dia de
-// descanso ou sem registro" -- exatamente como um dia realmente vazio.
+// Cabecalho de perfil agora abre um menu (Historico / Dados Pessoais)
+// em vez de ir direto para o historico mensal.
 function AlunoDashboard(props) {
-  var student = props.student;
   var weekDays = buildWeekDays(new Date());
   var today = new Date();
+
+  // Copia local mutavel dos dados de perfil do aluno, atualizada apos
+  // salvar em "Dados Pessoais" -- sem precisar recarregar a pagina.
+  var stateStudentData = useState(props.student);
+  var studentData = stateStudentData[0]; var setStudentData = stateStudentData[1];
+  var student = studentData;
 
   var stateAllExercises = useState([]); var allExercises = stateAllExercises[0]; var setAllExercises = stateAllExercises[1];
   var stateLoading = useState(true); var loading = stateLoading[0]; var setLoading = stateLoading[1];
@@ -1035,6 +1223,8 @@ function AlunoDashboard(props) {
   var stateDetailEx = useState(null); var detailEx = stateDetailEx[0]; var setDetailEx = stateDetailEx[1];
   var stateStarting = useState(false); var starting = stateStarting[0]; var setStarting = stateStarting[1];
   var stateShowMonthly = useState(false); var showMonthly = stateShowMonthly[0]; var setShowMonthly = stateShowMonthly[1];
+  var stateShowProfileMenu = useState(false); var showProfileMenu = stateShowProfileMenu[0]; var setShowProfileMenu = stateShowProfileMenu[1];
+  var stateShowPersonalData = useState(false); var showPersonalData = stateShowPersonalData[0]; var setShowPersonalData = stateShowPersonalData[1];
 
   var stateStartedAt = useState(student.workout_started_at || null);
   var startedAt = stateStartedAt[0]; var setStartedAt = stateStartedAt[1];
@@ -1074,6 +1264,18 @@ function AlunoDashboard(props) {
     initialLoad();
     return function () { cancelled = true; };
   }, [student.id]);
+
+  if (showPersonalData) {
+    return (
+      <PersonalDataScreen
+        student={studentData}
+        onBack={function () { setShowPersonalData(false); }}
+        onSaved={function (updatedProfile) {
+          setStudentData(function (prev) { return Object.assign({}, prev, updatedProfile); });
+        }}
+      />
+    );
+  }
 
   if (showMonthly) {
     return (
@@ -1240,13 +1442,14 @@ function AlunoDashboard(props) {
 
       <PressableProfileHeader
         name={student.name}
+        avatarUrl={student.avatar_url}
         title={"Treino de " + student.name.split(" ")[0]}
         subtitle={
           <React.Fragment>
             <Phone size={11} /> {student.phone}
           </React.Fragment>
         }
-        onClick={function () { setShowMonthly(true); }}
+        onClick={function () { setShowProfileMenu(true); }}
       />
 
       <div style={{ display: "flex", justifyContent: "flex-end" }}>
@@ -1355,13 +1558,23 @@ function AlunoDashboard(props) {
       )}
 
       {detailEx ? <ExerciseDetailModal ex={detailEx} onClose={function () { setDetailEx(null); }} /> : null}
+
+      {showProfileMenu ? (
+        <ProfileMenuModal
+          name={student.name}
+          avatarUrl={student.avatar_url}
+          onClose={function () { setShowProfileMenu(false); }}
+          onSelectHistory={function () { setShowProfileMenu(false); setShowMonthly(true); }}
+          onSelectPersonalData={function () { setShowProfileMenu(false); setShowPersonalData(true); }}
+        />
+      ) : null}
     </PageContainer>
   );
 }
 
 // Linha de exercicio no painel do professor (planejamento do dia).
 // Inclui Carga (weight) e Categoria (category). Sem etiqueta A/B/C.
-// Os campos de foto agora aceitam ficar vazios (bug de nao poder apagar corrigido).
+// Os campos de foto aceitam ficar vazios (remove a imagem de fato).
 function ProfessorExerciseRow(props) {
   var ex = props.ex;
   var stateEditing = useState(false); var editing = stateEditing[0]; var setEditing = stateEditing[1];
@@ -1386,8 +1599,6 @@ function ProfessorExerciseRow(props) {
     setEditing(false);
   }
 
-  // Campos de imagem: string vazia vira null explicitamente no banco --
-  // permite ao professor APAGAR um link de foto ja cadastrado.
   function saveEdit() {
     if (!name.trim()) return;
     var trimmedImage = image.trim();
@@ -1646,8 +1857,8 @@ function LibraryManager(props) {
   );
 }
 
-// Aviso de status de publicacao do dia selecionado: rascunho (amarelo/cinza)
-// ou ja enviado ao aluno (verde), exibido acima do botao de envio.
+// Aviso de status de publicacao do dia selecionado: rascunho (amarelo) ou
+// ja enviado ao aluno (verde), exibido acima do botao de envio.
 function PublishStatusBanner(props) {
   if (props.hasExercises === false) return null;
   var isPublished = props.isPublished;
@@ -1805,7 +2016,6 @@ function ProfessorPanel(props) {
   var canPlan = !isPastSelected;
   var sectionTitle = getSectionTitle(isPastSelected, isTodaySelected, selectedDayKey);
 
-  // Status de publicacao do dia: so faz sentido se ha pelo menos 1 exercicio.
   var allPublished = list.length > 0 && list.every(function (ex) { return ex.is_published; });
 
   var weekCircleItems = weekDays.map(function (d, i) {
@@ -1824,7 +2034,6 @@ function ProfessorPanel(props) {
     };
   });
 
-  // Biblioteca agrupada por categoria, para montar as <optgroup> do select.
   var libraryGroups = groupByCategory(library);
 
   function handleLibrarySelect(id) {
@@ -1878,8 +2087,6 @@ function ProfessorPanel(props) {
     }
   }
 
-  // Salvar uma edicao volta o exercicio para rascunho (is_published: false),
-  // ate o professor clicar em "Enviar Planejamento ao Aluno" de novo.
   async function saveEditExercise(exId, updates) {
     var updatesWithDraft = Object.assign({}, updates, { is_published: false });
     var result = await supabase.from("exercises").update(updatesWithDraft).eq("id", exId).select();
@@ -1896,8 +2103,6 @@ function ProfessorPanel(props) {
     }
   }
 
-  // Publica todos os exercicios do dia selecionado de uma vez -- o aluno
-  // so passa a enxergar esse dia depois deste clique.
   async function publishToday() {
     if (list.length === 0) return;
     setPublishing(true);
@@ -1926,6 +2131,7 @@ function ProfessorPanel(props) {
 
       <PressableProfileHeader
         name={selectedStudent.name}
+        avatarUrl={selectedStudent.avatar_url}
         title={selectedStudent.name.split(" ")[0]}
         subtitle={"Painel do professor - " + selectedStudent.phone}
         onClick={function () { setShowMonthly(true); }}
