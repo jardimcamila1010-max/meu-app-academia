@@ -19,6 +19,9 @@ import {
   Eye,
   BookOpen,
   Play,
+  Pause,
+  Square,
+  Timer,
   Lock as LockIcon,
   CheckCircle2,
   Coffee,
@@ -245,6 +248,24 @@ function formatTime(input) {
   var hh = String(d.getHours()).padStart(2, "0");
   var mm = String(d.getMinutes()).padStart(2, "0");
   return hh + ":" + mm;
+}
+
+// Formata segundos como relogio digital "HH:MM:SS" para o cronometro grande.
+function formatClock(totalSeconds) {
+  var h = Math.floor(totalSeconds / 3600);
+  var m = Math.floor((totalSeconds % 3600) / 60);
+  var s = totalSeconds % 60;
+  var pad = function (n) { return String(n).padStart(2, "0"); };
+  return pad(h) + ":" + pad(m) + ":" + pad(s);
+}
+
+// Formata segundos como "X min Y seg" para exibicao no historico.
+function formatCardioDuration(totalSeconds) {
+  var m = Math.floor(totalSeconds / 60);
+  var s = totalSeconds % 60;
+  if (m === 0) return s + " seg";
+  if (s === 0) return m + " min";
+  return m + " min " + s + " seg";
 }
 
 function pickRandomPhrase() {
@@ -900,6 +921,81 @@ function WeekCircleRow(props) {
   );
 }
 
+// Cronometro de Cardio/Esteira. So registra tempo -- nenhuma pergunta de
+// distancia ou intensidade. O estado (segundos, rodando, travado) vive no
+// AlunoDashboard (props), entao continua contando mesmo que o aluno role a
+// tela para ver outros exercicios, ja que o componente nao e desmontado.
+function CardioTimer(props) {
+  var seconds = props.seconds;
+  var running = props.running;
+  var locked = props.locked;
+
+  return (
+    <div style={{ background: C.panel, border: "1px solid " + C.border, borderRadius: 14, padding: 16, marginBottom: 18 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+        <Timer size={16} color={C.blue} />
+        <p style={{ color: C.silverDim, fontSize: 11.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, margin: 0 }}>
+          Cardio / Esteira
+        </p>
+      </div>
+
+      <p
+        style={{
+          color: C.white, fontSize: 40, fontWeight: 800, margin: "0 0 16px", textAlign: "center",
+          fontVariantNumeric: "tabular-nums", letterSpacing: 1,
+        }}
+      >
+        {formatClock(seconds)}
+      </p>
+
+      {locked ? (
+        <p style={{ color: C.success, fontSize: 13, fontWeight: 700, textAlign: "center", margin: 0 }}>
+          Cardio registrado: {formatCardioDuration(seconds)}
+        </p>
+      ) : (
+        <div style={{ display: "flex", gap: 8 }}>
+          <button
+            onClick={props.onStart}
+            disabled={running}
+            style={{
+              flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+              background: running ? C.panelAlt : C.blue, border: "none", borderRadius: 8,
+              color: running ? C.silverDim : C.white, fontSize: 13, fontWeight: 700, padding: "10px 0",
+              cursor: running ? "default" : "pointer",
+            }}
+          >
+            <Play size={14} /> Iniciar
+          </button>
+          <button
+            onClick={props.onPause}
+            disabled={!running}
+            style={{
+              flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+              background: "transparent", border: "1px solid " + (running ? C.warning : C.border), borderRadius: 8,
+              color: running ? C.warning : C.silverDim, fontSize: 13, fontWeight: 700, padding: "10px 0",
+              cursor: running ? "pointer" : "default",
+            }}
+          >
+            <Pause size={14} /> Pausar
+          </button>
+          <button
+            onClick={props.onFinish}
+            disabled={seconds === 0}
+            style={{
+              flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+              background: "transparent", border: "1px solid " + (seconds > 0 ? C.danger : C.border), borderRadius: 8,
+              color: seconds > 0 ? C.danger : C.silverDim, fontSize: 13, fontWeight: 700, padding: "10px 0",
+              cursor: seconds > 0 ? "pointer" : "default",
+            }}
+          >
+            <Square size={14} /> Finalizar
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CompletedDayView(props) {
   var record = props.record;
   var allRecords = props.allRecords || [];
@@ -918,7 +1014,7 @@ function CompletedDayView(props) {
         </div>
       ) : null}
 
-      <div style={{ display: "flex", alignItems: "center", gap: 12, background: C.panel, border: "1px solid " + C.blueDim, borderRadius: 12, padding: 14, marginBottom: record.summary_data ? 10 : 0 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, background: C.panel, border: "1px solid " + C.blueDim, borderRadius: 12, padding: 14, marginBottom: 10 }}>
         <div style={{ width: 42, height: 42, borderRadius: "50%", background: C.blueDeep, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
           <Flame size={18} color={C.blue} />
         </div>
@@ -926,6 +1022,17 @@ function CompletedDayView(props) {
           Treino concluido as <b>{formatTime(record.created_at)}</b>
         </p>
       </div>
+
+      {record.cardio_seconds ? (
+        <div style={{ display: "flex", alignItems: "center", gap: 12, background: C.panel, border: "1px solid " + C.warning, borderRadius: 12, padding: 14, marginBottom: (record.summary_data && record.summary_data.length > 0) ? 10 : 0 }}>
+          <div style={{ width: 42, height: 42, borderRadius: "50%", background: C.panelAlt, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <Timer size={18} color={C.warning} />
+          </div>
+          <p style={{ color: C.white, fontSize: 13.5, margin: 0 }}>
+            Cardio: <b style={{ color: C.warning }}>{formatCardioDuration(record.cardio_seconds)}</b>
+          </p>
+        </div>
+      ) : null}
 
       {record.summary_data && record.summary_data.length > 0 ? (
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -1200,8 +1307,8 @@ function CategoryHeading(props) {
 }
 
 // Painel do aluno. So enxerga exercicios com is_published = true.
-// Cabecalho de perfil agora abre um menu (Historico / Dados Pessoais)
-// em vez de ir direto para o historico mensal.
+// Cabecalho de perfil abre um menu (Historico / Dados Pessoais).
+// Cronometro de Cardio fica visivel sempre que o dia selecionado e hoje.
 function AlunoDashboard(props) {
   var weekDays = buildWeekDays(new Date());
   var today = new Date();
@@ -1226,6 +1333,13 @@ function AlunoDashboard(props) {
   var stateShowProfileMenu = useState(false); var showProfileMenu = stateShowProfileMenu[0]; var setShowProfileMenu = stateShowProfileMenu[1];
   var stateShowPersonalData = useState(false); var showPersonalData = stateShowPersonalData[0]; var setShowPersonalData = stateShowPersonalData[1];
 
+  // Estado do cronometro de Cardio -- fica no AlunoDashboard (nao dentro do
+  // CardioTimer) exatamente para continuar contando mesmo que o aluno
+  // navegue/role a tela, ja que o componente pai nunca e desmontado.
+  var stateCardioSeconds = useState(0); var cardioSeconds = stateCardioSeconds[0]; var setCardioSeconds = stateCardioSeconds[1];
+  var stateCardioRunning = useState(false); var cardioRunning = stateCardioRunning[0]; var setCardioRunning = stateCardioRunning[1];
+  var stateCardioLocked = useState(false); var cardioLocked = stateCardioLocked[0]; var setCardioLocked = stateCardioLocked[1];
+
   var stateStartedAt = useState(student.workout_started_at || null);
   var startedAt = stateStartedAt[0]; var setStartedAt = stateStartedAt[1];
 
@@ -1234,6 +1348,33 @@ function AlunoDashboard(props) {
     return weekDays[0];
   });
   var selectedDate = stateSelectedDate[0]; var setSelectedDate = stateSelectedDate[1];
+
+  // Cronometro: enquanto cardioRunning for true, incrementa 1 segundo por
+  // tick. O useEffect e recriado quando cardioRunning muda, mas o valor
+  // acumulado (cardioSeconds) persiste no estado do componente pai.
+  useEffect(function () {
+    if (!cardioRunning) return;
+    var intervalId = setInterval(function () {
+      setCardioSeconds(function (prev) { return prev + 1; });
+    }, 1000);
+    return function () { clearInterval(intervalId); };
+  }, [cardioRunning]);
+
+  function startCardio() {
+    setCardioRunning(true);
+  }
+  function pauseCardio() {
+    setCardioRunning(false);
+  }
+  function finishCardio() {
+    setCardioRunning(false);
+    setCardioLocked(true);
+  }
+  function resetCardio() {
+    setCardioSeconds(0);
+    setCardioRunning(false);
+    setCardioLocked(false);
+  }
 
   // So busca exercicios PUBLICADOS -- rascunhos do professor ficam invisiveis.
   async function fetchExercises() {
@@ -1358,7 +1499,9 @@ function AlunoDashboard(props) {
 
   // Deduplicacao: upsert por (student_id, workout_date). O peso final de
   // cada exercicio (o que o aluno digitou, ou o planejado se nao alterou)
-  // e capturado no snapshot salvo em summary_data.
+  // e capturado no snapshot salvo em summary_data. O tempo acumulado no
+  // cronometro de Cardio (running ou pausado, tanto faz) e enviado junto
+  // como cardio_seconds.
   async function finishWorkout() {
     if (finishing) return;
     setFinishing(true);
@@ -1378,6 +1521,7 @@ function AlunoDashboard(props) {
     });
 
     var todayDateStr = toDateOnlyString(today);
+    var cardioToSave = cardioSeconds > 0 ? cardioSeconds : null;
 
     var writeResult = await supabase
       .from("workout_history")
@@ -1386,6 +1530,7 @@ function AlunoDashboard(props) {
           student_id: student.id,
           workout_date: todayDateStr,
           summary_data: snapshot,
+          cardio_seconds: cardioToSave,
           created_at: new Date().toISOString(),
         }],
         { onConflict: "student_id,workout_date" }
@@ -1408,6 +1553,7 @@ function AlunoDashboard(props) {
     }
 
     setForceView(false);
+    resetCardio();
 
     var idsToReset = list.map(function (ex) { return ex.id; });
     resetTodayWorkoutSilently(idsToReset);
@@ -1480,6 +1626,17 @@ function AlunoDashboard(props) {
         />
       ) : (
         <div>
+          {isToday ? (
+            <CardioTimer
+              seconds={cardioSeconds}
+              running={cardioRunning}
+              locked={cardioLocked}
+              onStart={startCardio}
+              onPause={pauseCardio}
+              onFinish={finishCardio}
+            />
+          ) : null}
+
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
             <Flame size={16} color={C.blue} />
             <h2 style={{ color: C.white, fontSize: 16, fontWeight: 800, margin: 0 }}>
