@@ -27,7 +27,6 @@ import { supabase } from "./supabaseClient.js";
 
 var LOGO_URL = "https://i.postimg.cc/NLQPwFC2/Whats-App-Image-2026-07-14-at-17-04-16.jpg";
 var IMG_GERAL = "https://images.unsplash.com/photo-1583454110551-21f2fa2afe61?w=500&q=80";
-var TABS = ["A", "B", "C"];
 
 var DAY_TABS = [
   { key: "segunda", label: "S" },
@@ -155,7 +154,6 @@ function buildWeekDays(referenceDate) {
   return days;
 }
 
-// Grid de calendario mensal, sempre comecando na segunda-feira (5 ou 6 semanas).
 function buildMonthCells(baseDate) {
   var year = baseDate.getFullYear();
   var month = baseDate.getMonth();
@@ -231,8 +229,6 @@ function pickRandomPhrase() {
   return INCENTIVE_PHRASES[i];
 }
 
-// Titulo dinamico da secao de exercicios, conforme a "consciencia temporal"
-// do dia selecionado em relacao a hoje.
 function getSectionTitle(isPast, isToday, dayKey) {
   if (isPast) return "Relatorio do Dia";
   if (isToday) return "Treino de Hoje";
@@ -555,7 +551,7 @@ function StudentPicker(props) {
             var histDate = new Date(history.created_at);
             isToday = isSameDate(histDate, new Date());
             historyLabel = isToday
-              ? "Concluiu o Treino " + history.workout_tab + " hoje"
+              ? "Concluiu o Treino hoje"
               : "Ultimo treino: " + formatFriendlyDate(histDate);
           }
           return (
@@ -685,7 +681,7 @@ function CompletedDayView(props) {
           <Flame size={18} color={C.blue} />
         </div>
         <p style={{ color: C.white, fontSize: 13.5, margin: 0 }}>
-          Treino <b>{record.workout_tab}</b> concluido as <b>{formatTime(record.created_at)}</b>
+          Treino concluido as <b>{formatTime(record.created_at)}</b>
         </p>
       </div>
 
@@ -701,26 +697,26 @@ function CompletedDayView(props) {
               }
             }
             return (
-          <div key={idx} style={{ background: C.panel, border: "1px solid " + (showEvolution ? C.success : C.border), borderRadius: 8, padding: "10px", marginBottom: "8px" }}>
-  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-    <div style={{ display: "flex", flexDirection: "column" }}>
-      <span style={{ color: C.white, fontSize: 13, fontWeight: '500' }}>{item.name}</span>
-      <span style={{ color: C.silverDim, fontSize: 10, textTransform: 'uppercase' }}>Exercício</span>
-    </div>
-    <div style={{ textAlign: "right", display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
-      <div style={{ display: "flex", alignItems: "baseline" }}>
-        <span style={{ color: "#60a5fa", fontSize: 16, fontWeight: 'bold' }}>{item.weight || '-'}</span>
-        <span style={{ color: "#60a5fa", opacity: 0.7, fontSize: 10, fontWeight: 'bold', marginLeft: 2 }}>KG</span>
-      </div>
-      <span style={{ color: C.silverDim, fontSize: 9, textTransform: 'uppercase' }}>Carga</span>
-    </div>
-  </div>
-  {showEvolution && (
-    <p style={{ color: C.success, fontSize: 11, fontWeight: 700, margin: "6px 0 0" }}>
-      🔥 Evolução! Você aumentou a carga neste aparelho
-    </p>
-  )}
-</div>
+              <div key={idx} style={{ background: C.panel, border: "1px solid " + (showEvolution ? C.success : C.border), borderRadius: 8, padding: "10px", marginBottom: "8px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div style={{ display: "flex", flexDirection: "column" }}>
+                    <span style={{ color: C.white, fontSize: 13, fontWeight: '500' }}>{item.name}</span>
+                    <span style={{ color: C.silverDim, fontSize: 10, textTransform: 'uppercase' }}>Exercício</span>
+                  </div>
+                  <div style={{ textAlign: "right", display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
+                    <div style={{ display: "flex", alignItems: "baseline" }}>
+                      <span style={{ color: "#60a5fa", fontSize: 16, fontWeight: 'bold' }}>{item.weight || '-'}</span>
+                      <span style={{ color: "#60a5fa", opacity: 0.7, fontSize: 10, fontWeight: 'bold', marginLeft: 2 }}>KG</span>
+                    </div>
+                    <span style={{ color: C.silverDim, fontSize: 9, textTransform: 'uppercase' }}>Carga</span>
+                  </div>
+                </div>
+                {showEvolution && (
+                  <p style={{ color: C.success, fontSize: 11, fontWeight: 700, margin: "6px 0 0" }}>
+                    🔥 Evolução! Você aumentou a carga neste aparelho
+                  </p>
+                )}
+              </div>
             );
           })}
         </div>
@@ -738,7 +734,6 @@ function CompletedDayView(props) {
   );
 }
 
-// Mensagem exibida quando um dia PASSADO nao tem historico de treino nenhum.
 function RestOrNoRecordMessage() {
   return (
     <div style={{ background: C.panel, border: "1px solid " + C.border, borderRadius: 12, padding: "22px 16px", textAlign: "center" }}>
@@ -894,6 +889,7 @@ function ExerciseCard(props) {
   var ex = props.ex;
   var stateImgError = useState(false); var imgError = stateImgError[0]; var setImgError = stateImgError[1];
   var checked = !!ex.is_completed;
+  var displayWeight = props.weight !== undefined ? props.weight : (ex.weight || "");
 
   return (
     <div style={{ background: checked ? "rgba(47,134,198,0.08)" : C.panel, border: "1px solid " + (checked ? C.blueDim : C.border), borderRadius: 14, overflow: "hidden" }}>
@@ -916,10 +912,10 @@ function ExerciseCard(props) {
           <div style={{ display: "flex", alignItems: "center", gap: 6 }} onClick={function (e) { e.stopPropagation(); }}>
             <label style={{ color: C.silverDim, fontSize: 12 }}>Carga</label>
             <input
-              type="number" inputMode="decimal" placeholder="0"
-              value={props.weight === undefined ? "" : props.weight}
+              type="text" placeholder="0"
+              value={displayWeight}
               onChange={function (e) { props.onWeightChange(ex.id, e.target.value); }}
-              style={{ width: 56, background: C.bg, border: "1px solid " + C.border, borderRadius: 6, color: C.white, fontSize: 13, padding: "4px 6px", outline: "none" }}
+              style={{ width: 65, background: C.bg, border: "1px solid " + C.border, borderRadius: 6, color: C.white, fontSize: 13, padding: "4px 6px", outline: "none" }}
             />
             <span style={{ color: C.silverDim, fontSize: 12 }}>kg</span>
           </div>
@@ -957,12 +953,12 @@ function LockedExerciseCard(props) {
       <div style={{ padding: 12 }}>
         <p style={{ color: C.white, fontSize: 13.5, fontWeight: 700, margin: "0 0 3px" }}>{ex.name}</p>
         <p style={{ color: C.silverDim, fontSize: 12, margin: 0 }}>{ex.sets} series x {ex.reps} reps</p>
+        {ex.weight && <p style={{ color: C.blue, fontSize: 12, fontWeight: 700, margin: "4px 0 0" }}>Carga: {ex.weight} kg</p>}
       </div>
     </div>
   );
 }
 
-// Painel do aluno.
 function AlunoDashboard(props) {
   var student = props.student;
   var weekDays = buildWeekDays(new Date());
@@ -1091,15 +1087,12 @@ function AlunoDashboard(props) {
     }
   }
 
-  // Deduplicacao: upsert por (student_id, workout_date), com indice unico
-  // no banco. Mesmo clicando varias vezes em "Finalizar", so ha 1 linha/dia.
   async function finishWorkout() {
     if (finishing) return;
     setFinishing(true);
     setFinishError("");
 
     var list = plannedList;
-    var mainTab = list.length > 0 ? list[0].workout_tab : "-";
     var snapshot = list.map(function (ex) {
       var key = student.id + "-" + selectedDayKey + "-" + ex.id;
       return {
@@ -1107,7 +1100,7 @@ function AlunoDashboard(props) {
         sets: ex.sets,
         reps: ex.reps,
         completed: !!ex.is_completed,
-        weight: weights[key] || null,
+        weight: weights[key] !== undefined ? weights[key] : (ex.weight || null),
       };
     });
 
@@ -1119,7 +1112,6 @@ function AlunoDashboard(props) {
         [{
           student_id: student.id,
           workout_date: todayDateStr,
-          workout_tab: mainTab,
           summary_data: snapshot,
           created_at: new Date().toISOString(),
         }],
@@ -1299,18 +1291,18 @@ function ProfessorExerciseRow(props) {
   var stateName = useState(ex.name); var name = stateName[0]; var setName = stateName[1];
   var stateSets = useState(String(ex.sets)); var sets = stateSets[0]; var setSets = stateSets[1];
   var stateReps = useState(ex.reps); var reps = stateReps[0]; var setReps = stateReps[1];
+  var stateWeight = useState(ex.weight || ""); var weight = stateWeight[0]; var setWeight = stateWeight[1];
   var stateImage = useState(ex.image || ""); var image = stateImage[0]; var setImage = stateImage[1];
   var stateImage2 = useState(ex.image2 || ""); var image2 = stateImage2[0]; var setImage2 = stateImage2[1];
-  var stateTabVal = useState(ex.workout_tab); var tabVal = stateTabVal[0]; var setTabVal = stateTabVal[1];
   var stateNotes = useState(ex.notes || ""); var notes = stateNotes[0]; var setNotes = stateNotes[1];
 
   function cancelEdit() {
     setName(ex.name);
     setSets(String(ex.sets));
     setReps(ex.reps);
+    setWeight(ex.weight || "");
     setImage(ex.image || "");
     setImage2(ex.image2 || "");
-    setTabVal(ex.workout_tab);
     setNotes(ex.notes || "");
     setEditing(false);
   }
@@ -1321,9 +1313,9 @@ function ProfessorExerciseRow(props) {
       name: name.trim(),
       sets: Number(sets) || 1,
       reps: reps.trim() || "-",
+      weight: weight.trim(),
       image: image.trim() || IMG_GERAL,
       image2: image2.trim() || null,
-      workout_tab: tabVal,
       notes: notes.trim() || null,
     });
     setEditing(false);
@@ -1336,9 +1328,7 @@ function ProfessorExerciseRow(props) {
         <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
           <input type="number" placeholder="Series" value={sets} onChange={function (e) { setSets(e.target.value); }} style={Object.assign({}, plainInputStyle, { width: 70 })} />
           <input type="text" placeholder="Repeticoes" value={reps} onChange={function (e) { setReps(e.target.value); }} style={Object.assign({}, plainInputStyle, { flex: 1 })} />
-          <select value={tabVal} onChange={function (e) { setTabVal(e.target.value); }} style={Object.assign({}, plainInputStyle, { width: 60, padding: "10px 4px" })}>
-            {TABS.map(function (t) { return <option key={t} value={t}>{t}</option>; })}
-          </select>
+          <input type="text" placeholder="Peso" value={weight} onChange={function (e) { setWeight(e.target.value); }} style={Object.assign({}, plainInputStyle, { width: 80 })} />
         </div>
         <input type="text" placeholder="URL da foto 1" value={image} onChange={function (e) { setImage(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })} />
         <input type="text" placeholder="URL da foto 2" value={image2} onChange={function (e) { setImage2(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })} />
@@ -1361,7 +1351,7 @@ function ProfessorExerciseRow(props) {
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <p style={{ color: C.white, fontSize: 13.5, fontWeight: 700, margin: 0 }}>{ex.name}</p>
-          <span style={{ background: C.blueDeep, color: C.blue, fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 5 }}>{ex.workout_tab}</span>
+          {ex.weight && <span style={{ color: C.blue, fontSize: 11, fontWeight: 800 }}>{ex.weight} kg</span>}
         </div>
         <p style={{ color: C.silverDim, fontSize: 12, margin: 0 }}>{ex.sets} series x {ex.reps} reps</p>
         {ex.notes ? <p style={{ color: C.silverDim, fontSize: 11, margin: "2px 0 0", fontStyle: "italic" }}>{ex.notes}</p> : null}
@@ -1392,7 +1382,7 @@ function RecentHistoryList(props) {
         {props.records.slice(0, 5).map(function (r) {
           return (
             <div key={r.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: C.panel, border: "1px solid " + C.border, borderRadius: 8, padding: "8px 10px" }}>
-              <span style={{ color: C.white, fontSize: 12.5, fontWeight: 700 }}>Treino {r.workout_tab}</span>
+              <span style={{ color: C.white, fontSize: 12.5, fontWeight: 700 }}>Treino Concluido</span>
               <span style={{ color: C.silverDim, fontSize: 11.5 }}>{formatFriendlyDate(r.created_at)}</span>
             </div>
           );
@@ -1493,9 +1483,6 @@ function LibraryManager(props) {
   );
 }
 
-// Painel do professor: dia PASSADO -> so historico/mensagem, SEM formulario
-// de planejamento (nao se edita o passado). Dia de HOJE ou FUTURO -> mostra
-// (e permite editar) o planejamento normalmente.
 function ProfessorPanel(props) {
   var stateMode = useState("students"); var mode = stateMode[0]; var setMode = stateMode[1];
   var stateStudents = useState([]); var students = stateStudents[0]; var setStudents = stateStudents[1];
@@ -1523,9 +1510,9 @@ function ProfessorPanel(props) {
   var stateName = useState(""); var newName = stateName[0]; var setNewName = stateName[1];
   var stateSets = useState("3"); var newSets = stateSets[0]; var setNewSets = stateSets[1];
   var stateReps = useState("10-12"); var newReps = stateReps[0]; var setNewReps = stateReps[1];
+  var stateWeight = useState(""); var newWeight = stateWeight[0]; var setNewWeight = stateWeight[1];
   var stateImage = useState(""); var newImage = stateImage[0]; var setNewImage = stateImage[1];
   var stateImage2 = useState(""); var newImage2 = stateImage2[0]; var setNewImage2 = stateImage2[1];
-  var stateWorkoutTab = useState("A"); var newWorkoutTab = stateWorkoutTab[0]; var setNewWorkoutTab = stateWorkoutTab[1];
   var stateNotes = useState(""); var newNotes = stateNotes[0]; var setNewNotes = stateNotes[1];
 
   useEffect(function () {
@@ -1624,7 +1611,6 @@ function ProfessorPanel(props) {
   var list = byDay[selectedDayKey];
   var historyForSelectedDate = findHistoryForDate(historyRecords, selectedDate);
   var isCompletedDay = !!historyForSelectedDate;
-  // Trava de edicao: o formulario de planejamento so aparece para hoje/futuro.
   var canPlan = !isPastSelected;
   var sectionTitle = getSectionTitle(isPastSelected, isTodaySelected, selectedDayKey);
 
@@ -1659,11 +1645,11 @@ function ProfessorPanel(props) {
     if (!newName.trim()) return;
     var payload = {
       student_id: selectedStudent.id,
-      workout_tab: newWorkoutTab,
       scheduled_day: selectedDayKey,
       name: newName.trim(),
       sets: Number(newSets) || 1,
       reps: newReps.trim() || "-",
+      weight: newWeight.trim(),
       image: newImage.trim() || IMG_GERAL,
       image2: newImage2.trim() || null,
       notes: newNotes.trim() || null,
@@ -1675,6 +1661,7 @@ function ProfessorPanel(props) {
       setNewName("");
       setNewSets("3");
       setNewReps("10-12");
+      setNewWeight("");
       setNewImage("");
       setNewImage2("");
       setNewNotes("");
@@ -1773,9 +1760,13 @@ function ProfessorPanel(props) {
               <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
                 <input type="number" placeholder="Series" value={newSets} onChange={function (e) { setNewSets(e.target.value); }} style={Object.assign({}, plainInputStyle, { width: 70 })} />
                 <input type="text" placeholder="Repeticoes (ex: 10-12)" value={newReps} onChange={function (e) { setNewReps(e.target.value); }} style={Object.assign({}, plainInputStyle, { flex: 1 })} />
-                <select value={newWorkoutTab} onChange={function (e) { setNewWorkoutTab(e.target.value); }} style={Object.assign({}, plainInputStyle, { width: 60, padding: "10px 4px" })}>
-                  {TABS.map(function (t) { return <option key={t} value={t}>{t}</option>; })}
-                </select>
+                <input 
+                  type="text" 
+                  placeholder="Carga (kg)" 
+                  value={newWeight} 
+                  onChange={function (e) { setNewWeight(e.target.value); }} 
+                  style={Object.assign({}, plainInputStyle, { width: 80 })} 
+                />
               </div>
               <input type="text" placeholder="URL da foto 1" value={newImage} onChange={function (e) { setNewImage(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })} />
               <input type="text" placeholder="URL da foto 2 (opcional)" value={newImage2} onChange={function (e) { setNewImage2(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })} />
