@@ -27,6 +27,7 @@ import { supabase } from "./supabaseClient.js";
 
 var LOGO_URL = "https://i.postimg.cc/NLQPwFC2/Whats-App-Image-2026-07-14-at-17-04-16.jpg";
 var IMG_GERAL = "https://images.unsplash.com/photo-1583454110551-21f2fa2afe61?w=500&q=80";
+var DEFAULT_CATEGORY = "Geral";
 
 var DAY_TABS = [
   { key: "segunda", label: "S" },
@@ -108,6 +109,22 @@ function groupByDay(rows) {
   return grouped;
 }
 
+// Agrupa uma lista de exercicios por category, mantendo a ordem de
+// primeira aparicao dos grupos. Sem categoria cai em "Geral".
+function groupByCategory(rows) {
+  var order = [];
+  var grouped = {};
+  for (var i = 0; i < rows.length; i++) {
+    var cat = (rows[i].category && rows[i].category.trim()) ? rows[i].category.trim() : DEFAULT_CATEGORY;
+    if (!grouped[cat]) {
+      grouped[cat] = [];
+      order.push(cat);
+    }
+    grouped[cat].push(rows[i]);
+  }
+  return order.map(function (cat) { return { category: cat, items: grouped[cat] }; });
+}
+
 function getDayKeyForDate(date) {
   var day = date.getDay();
   var map = ["domingo", "segunda", "terca", "quarta", "quinta", "sexta", "sabado"];
@@ -185,9 +202,6 @@ function findHistoryForDate(records, date) {
   return null;
 }
 
-// Busca a carga anterior (mais recente antes de beforeDate) do mesmo
-// exercicio pelo nome, para deteccao de evolucao. Continua funcionando
-// normalmente com o novo campo de peso, ja que compara por item.weight.
 function getPreviousWeight(historyRecords, exerciseName, beforeDate) {
   var candidates = historyRecords
     .filter(function (r) { return new Date(r.created_at).getTime() < beforeDate.getTime() && r.summary_data; })
@@ -234,7 +248,6 @@ function pickRandomPhrase() {
   return INCENTIVE_PHRASES[i];
 }
 
-// Titulo dinamico da secao de exercicios, conforme o dia selecionado.
 function getSectionTitle(isPast, isToday, dayKey) {
   if (isPast) return "Relatorio do Dia";
   if (isToday) return "Treino de Hoje";
@@ -664,9 +677,6 @@ function WeekCircleRow(props) {
   );
 }
 
-// Resumo do treino finalizado. Layout da lista: nome a esquerda, carga
-// em destaque (azul #60a5fa, negrito, "KG") a direita. Evolucao continua
-// comparando o novo campo de peso com a ocorrencia anterior.
 function CompletedDayView(props) {
   var record = props.record;
   var allRecords = props.allRecords || [];
@@ -887,8 +897,6 @@ function ExerciseDetailModal(props) {
   );
 }
 
-// Card interativo do aluno. Mostra a carga planejada pelo professor
-// (ex.weight) e permite ajustar o valor usado no treino de hoje.
 function ExerciseCard(props) {
   var ex = props.ex;
   var stateImgError = useState(false); var imgError = stateImgError[0]; var setImgError = stateImgError[1];
@@ -972,6 +980,16 @@ function LockedExerciseCard(props) {
   );
 }
 
+// Titulo sutil de categoria (prata, pequeno, caixa alta) exibido antes de
+// cada bloco de exercicios agrupado no painel do aluno.
+function CategoryHeading(props) {
+  return (
+    <p style={{ color: C.silverDim, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, margin: "18px 0 10px" }}>
+      {props.title}
+    </p>
+  );
+}
+
 // Painel do aluno.
 function AlunoDashboard(props) {
   var student = props.student;
@@ -1042,6 +1060,7 @@ function AlunoDashboard(props) {
   var isPast = stripTime(selectedDate).getTime() < stripTime(today).getTime();
   var selectedDayKey = getDayKeyForDate(selectedDate);
   var plannedList = allExercises.filter(function (e) { return e.scheduled_day === selectedDayKey; });
+  var groupedPlannedList = groupByCategory(plannedList);
   var historyForSelectedDate = findHistoryForDate(historyRecords, selectedDate);
 
   var startedAtIsToday = startedAt ? isSameDate(new Date(startedAt), today) : false;
@@ -1101,9 +1120,9 @@ function AlunoDashboard(props) {
     }
   }
 
-  // Deduplicacao: upsert por (student_id, workout_date), com indice unico
-  // no banco. O peso final de cada exercicio (o que o aluno digitou, ou o
-  // planejado se ele nao alterou) e capturado no snapshot salvo em summary_data.
+  // Deduplicacao: upsert por (student_id, workout_date). O peso final de
+  // cada exercicio (o que o aluno digitou, ou o planejado se nao alterou)
+  // e capturado no snapshot salvo em summary_data.
   async function finishWorkout() {
     if (finishing) return;
     setFinishing(true);
@@ -1242,21 +1261,30 @@ function AlunoDashboard(props) {
               </p>
             )
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              {plannedList.map(function (ex) {
-                if (isInteractive) {
-                  return (
-                    <ExerciseCard
-                      key={ex.id}
-                      ex={ex}
-                      weight={weights[student.id + "-" + selectedDayKey + "-" + ex.id]}
-                      onToggle={toggle}
-                      onWeightChange={setWeight}
-                      onOpenDetail={setDetailEx}
-                    />
-                  );
-                }
-                return <LockedExerciseCard key={ex.id} ex={ex} onOpenDetail={setDetailEx} />;
+            <div>
+              {groupedPlannedList.map(function (group) {
+                return (
+                  <div key={group.category}>
+                    <CategoryHeading title={group.category} />
+                    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                      {group.items.map(function (ex) {
+                        if (isInteractive) {
+                          return (
+                            <ExerciseCard
+                              key={ex.id}
+                              ex={ex}
+                              weight={weights[student.id + "-" + selectedDayKey + "-" + ex.id]}
+                              onToggle={toggle}
+                              onWeightChange={setWeight}
+                              onOpenDetail={setDetailEx}
+                            />
+                          );
+                        }
+                        return <LockedExerciseCard key={ex.id} ex={ex} onOpenDetail={setDetailEx} />;
+                      })}
+                    </div>
+                  </div>
+                );
               })}
             </div>
           )}
@@ -1304,7 +1332,7 @@ function AlunoDashboard(props) {
 }
 
 // Linha de exercicio no painel do professor (sem etiqueta A/B/C).
-// Inclui campo de Carga (peso planejado), salvo em exercises.weight.
+// Inclui Carga (weight) e Categoria (category).
 function ProfessorExerciseRow(props) {
   var ex = props.ex;
   var stateEditing = useState(false); var editing = stateEditing[0]; var setEditing = stateEditing[1];
@@ -1312,6 +1340,7 @@ function ProfessorExerciseRow(props) {
   var stateSets = useState(String(ex.sets)); var sets = stateSets[0]; var setSets = stateSets[1];
   var stateReps = useState(ex.reps); var reps = stateReps[0]; var setReps = stateReps[1];
   var stateWeight = useState(ex.weight != null ? String(ex.weight) : ""); var weight = stateWeight[0]; var setWeight = stateWeight[1];
+  var stateCategory = useState(ex.category || ""); var category = stateCategory[0]; var setCategory = stateCategory[1];
   var stateImage = useState(ex.image || ""); var image = stateImage[0]; var setImage = stateImage[1];
   var stateImage2 = useState(ex.image2 || ""); var image2 = stateImage2[0]; var setImage2 = stateImage2[1];
   var stateNotes = useState(ex.notes || ""); var notes = stateNotes[0]; var setNotes = stateNotes[1];
@@ -1321,6 +1350,7 @@ function ProfessorExerciseRow(props) {
     setSets(String(ex.sets));
     setReps(ex.reps);
     setWeight(ex.weight != null ? String(ex.weight) : "");
+    setCategory(ex.category || "");
     setImage(ex.image || "");
     setImage2(ex.image2 || "");
     setNotes(ex.notes || "");
@@ -1334,6 +1364,7 @@ function ProfessorExerciseRow(props) {
       sets: Number(sets) || 1,
       reps: reps.trim() || "-",
       weight: weight.trim() !== "" ? Number(weight.replace(",", ".")) : null,
+      category: category.trim() || null,
       image: image.trim() || IMG_GERAL,
       image2: image2.trim() || null,
       notes: notes.trim() || null,
@@ -1345,6 +1376,7 @@ function ProfessorExerciseRow(props) {
     return (
       <div style={{ background: C.panelAlt, border: "1px solid " + C.blueDim, borderRadius: 12, padding: 12 }}>
         <input type="text" placeholder="Nome do exercicio" value={name} onChange={function (e) { setName(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })} />
+        <input type="text" placeholder="Categoria (ex: Peito, Gluteos)" value={category} onChange={function (e) { setCategory(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })} />
         <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
           <input type="number" placeholder="Series" value={sets} onChange={function (e) { setSets(e.target.value); }} style={Object.assign({}, plainInputStyle, { width: 70 })} />
           <input type="text" placeholder="Repeticoes" value={reps} onChange={function (e) { setReps(e.target.value); }} style={Object.assign({}, plainInputStyle, { flex: 1 })} />
@@ -1371,7 +1403,7 @@ function ProfessorExerciseRow(props) {
       <div style={{ flex: 1, minWidth: 0 }}>
         <p style={{ color: C.white, fontSize: 13.5, fontWeight: 700, margin: 0 }}>{ex.name}</p>
         <p style={{ color: C.silverDim, fontSize: 12, margin: 0 }}>
-          {ex.sets} series x {ex.reps} reps
+          {ex.category ? ex.category + " - " : ""}{ex.sets} series x {ex.reps} reps
           {ex.weight != null ? <span style={{ color: C.weightBlue, fontWeight: 700 }}> - {ex.weight}KG</span> : null}
         </p>
         {ex.notes ? <p style={{ color: C.silverDim, fontSize: 11, margin: "2px 0 0", fontStyle: "italic" }}>{ex.notes}</p> : null}
@@ -1412,6 +1444,7 @@ function RecentHistoryList(props) {
   );
 }
 
+// Biblioteca Geral: cadastro de exercicios reutilizaveis, com categoria.
 function LibraryManager(props) {
   var stateItems = useState([]); var items = stateItems[0]; var setItems = stateItems[1];
   var stateLoading = useState(true); var loading = stateLoading[0]; var setLoading = stateLoading[1];
@@ -1465,9 +1498,9 @@ function LibraryManager(props) {
 
       <div style={{ background: C.panelAlt, border: "1px solid " + C.border, borderRadius: 12, padding: 12, marginBottom: 20 }}>
         <input type="text" placeholder="Nome do exercicio" value={name} onChange={function (e) { setName(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })} />
+        <input type="text" placeholder="Categoria (ex: Peito, Gluteos)" value={category} onChange={function (e) { setCategory(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })} />
         <input type="text" placeholder="URL da foto 1" value={image} onChange={function (e) { setImage(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })} />
-        <input type="text" placeholder="URL da foto 2" value={image2} onChange={function (e) { setImage2(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })} />
-        <input type="text" placeholder="Categoria (ex: Pernas, Peito)" value={category} onChange={function (e) { setCategory(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 10 })} />
+        <input type="text" placeholder="URL da foto 2" value={image2} onChange={function (e) { setImage2(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 10 })} />
         <button onClick={addItem} disabled={saving} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: C.blue, border: "none", borderRadius: 8, color: C.white, fontSize: 13, fontWeight: 700, padding: "10px 0", cursor: "pointer", opacity: saving ? 0.7 : 1 }}>
           {saving ? <Spinner size={14} /> : <Plus size={15} />}
           {saving ? "Salvando..." : "Adicionar a Biblioteca"}
@@ -1504,8 +1537,8 @@ function LibraryManager(props) {
 }
 
 // Painel do professor: dia PASSADO -> so historico/mensagem, sem formulario.
-// Dia de HOJE ou FUTURO -> planejamento normal (sem selecao A/B/C, com
-// campo de Carga que grava em exercises.weight).
+// Dia de HOJE ou FUTURO -> planejamento normal (sem selecao A/B/C), com
+// selecao da biblioteca agrupada por categoria via <optgroup>.
 function ProfessorPanel(props) {
   var stateMode = useState("students"); var mode = stateMode[0]; var setMode = stateMode[1];
   var stateStudents = useState([]); var students = stateStudents[0]; var setStudents = stateStudents[1];
@@ -1534,6 +1567,7 @@ function ProfessorPanel(props) {
   var stateSets = useState("3"); var newSets = stateSets[0]; var setNewSets = stateSets[1];
   var stateReps = useState("10-12"); var newReps = stateReps[0]; var setNewReps = stateReps[1];
   var stateWeight = useState(""); var newWeight = stateWeight[0]; var setNewWeight = stateWeight[1];
+  var stateCategory = useState(""); var newCategory = stateCategory[0]; var setNewCategory = stateCategory[1];
   var stateImage = useState(""); var newImage = stateImage[0]; var setNewImage = stateImage[1];
   var stateImage2 = useState(""); var newImage2 = stateImage2[0]; var setNewImage2 = stateImage2[1];
   var stateNotes = useState(""); var newNotes = stateNotes[0]; var setNewNotes = stateNotes[1];
@@ -1653,12 +1687,16 @@ function ProfessorPanel(props) {
     };
   });
 
+  // Biblioteca agrupada por categoria, para montar as <optgroup> do select.
+  var libraryGroups = groupByCategory(library);
+
   function handleLibrarySelect(id) {
     setLibrarySelectId(id);
     if (!id) return;
     var item = library.find(function (it) { return it.id === id; });
     if (item) {
       setNewName(item.name);
+      setNewCategory(item.category || "");
       setNewImage(item.image || "");
       setNewImage2(item.image2 || "");
     }
@@ -1673,6 +1711,7 @@ function ProfessorPanel(props) {
       sets: Number(newSets) || 1,
       reps: newReps.trim() || "-",
       weight: newWeight.trim() !== "" ? Number(newWeight.replace(",", ".")) : null,
+      category: newCategory.trim() || null,
       image: newImage.trim() || IMG_GERAL,
       image2: newImage2.trim() || null,
       notes: newNotes.trim() || null,
@@ -1685,6 +1724,7 @@ function ProfessorPanel(props) {
       setNewSets("3");
       setNewReps("10-12");
       setNewWeight("");
+      setNewCategory("");
       setNewImage("");
       setNewImage2("");
       setNewNotes("");
@@ -1776,10 +1816,19 @@ function ProfessorPanel(props) {
 
               <select value={librarySelectId} onChange={function (e) { handleLibrarySelect(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })}>
                 <option value="">Selecionar da Biblioteca (opcional)</option>
-                {library.map(function (it) { return <option key={it.id} value={it.id}>{it.name}</option>; })}
+                {libraryGroups.map(function (group) {
+                  return (
+                    <optgroup key={group.category} label={group.category}>
+                      {group.items.map(function (it) {
+                        return <option key={it.id} value={it.id}>{it.name}</option>;
+                      })}
+                    </optgroup>
+                  );
+                })}
               </select>
 
               <input type="text" placeholder="Nome do exercicio" value={newName} onChange={function (e) { setNewName(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })} />
+              <input type="text" placeholder="Categoria (ex: Peito, Gluteos)" value={newCategory} onChange={function (e) { setNewCategory(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })} />
               <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
                 <input type="number" placeholder="Series" value={newSets} onChange={function (e) { setNewSets(e.target.value); }} style={Object.assign({}, plainInputStyle, { width: 70 })} />
                 <input type="text" placeholder="Repeticoes (ex: 10-12)" value={newReps} onChange={function (e) { setNewReps(e.target.value); }} style={Object.assign({}, plainInputStyle, { flex: 1 })} />
