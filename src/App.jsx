@@ -264,15 +264,28 @@ function Spinner(props) {
 }
 
 // Miniatura de imagem com fallback elegante: se nao houver src ou o link
-// quebrar, mostra o icone ImageIcon centralizado em vez de espaco vazio/feio.
+// quebrar, mostra fundo cinza escuro (panelAlt) com o icone ImageIcon
+// centralizado, em vez de deixar um espaco vazio ou feio.
 function ImageThumb(props) {
   var stateError = useState(false); var imgError = stateError[0]; var setImgError = stateError[1];
   var size = props.size || 44;
-  var iconSize = props.iconSize || Math.round(size * 0.45);
-  var showImage = props.src && !imgError;
+  var iconSize = props.iconSize || Math.round((typeof size === "number" ? size : 44) * 0.45);
+  var showImage = !!props.src && !imgError;
 
   return (
-    <div style={{ width: size, height: size, borderRadius: props.radius || 8, overflow: "hidden", flexShrink: 0, background: C.panelAlt, display: "flex", alignItems: "center", justifyContent: "center" }}>
+    <div
+      style={{
+        width: size,
+        height: size,
+        borderRadius: props.radius === 0 ? 0 : (props.radius || 8),
+        overflow: "hidden",
+        flexShrink: 0,
+        background: C.panelAlt,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
       {showImage ? (
         <img
           src={props.src}
@@ -899,8 +912,12 @@ function ExerciseDetailModal(props) {
         </div>
 
         <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
-          <ImageThumb src={ex.image} alt={ex.name + " posicao 1"} size="100%" radius={10} iconSize={22} />
-          <ImageThumb src={ex.image2} alt={ex.name + " posicao 2"} size="100%" radius={10} iconSize={22} />
+          <div style={{ flex: 1, height: 130 }}>
+            <ImageThumb src={ex.image} alt={ex.name + " posicao 1"} size="100%" radius={10} iconSize={22} />
+          </div>
+          <div style={{ flex: 1, height: 130 }}>
+            <ImageThumb src={ex.image2} alt={ex.name + " posicao 2"} size="100%" radius={10} iconSize={22} />
+          </div>
         </div>
 
         <p style={{ color: C.silverDim, fontSize: 12.5, margin: "0 0 10px" }}>{ex.sets} series x {ex.reps} reps</p>
@@ -985,17 +1002,17 @@ function LockedExerciseCard(props) {
   );
 }
 
-// Titulo sutil de categoria (prata, pequeno, caixa alta) usado para separar
-// blocos de exercicios/grupos musculares em qualquer lista do app.
+// Titulo simples de categoria (prata, pequeno, caixa alta) usado para
+// separar blocos de exercicios/grupos musculares (ex: "MEMBROS INFERIORES").
 function CategoryHeading(props) {
   return (
     <p style={{ color: C.silverDim, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, margin: props.first ? "0 0 10px" : "18px 0 10px" }}>
-      {props.title}
+      {(props.title || DEFAULT_CATEGORY).toUpperCase()}
     </p>
   );
 }
 
-// Painel do aluno.
+// Painel do aluno. A lista do dia e sempre agrupada por categoria.
 function AlunoDashboard(props) {
   var student = props.student;
   var weekDays = buildWeekDays(new Date());
@@ -1381,7 +1398,7 @@ function ProfessorExerciseRow(props) {
     return (
       <div style={{ background: C.panelAlt, border: "1px solid " + C.blueDim, borderRadius: 12, padding: 12 }}>
         <input type="text" placeholder="Nome do exercicio" value={name} onChange={function (e) { setName(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })} />
-        <input type="text" placeholder="Categoria (ex: Peito, Gluteos)" value={category} onChange={function (e) { setCategory(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })} />
+        <input type="text" placeholder="Categoria (ex: Membros Inferiores)" value={category} onChange={function (e) { setCategory(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })} />
         <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
           <input type="number" placeholder="Series" value={sets} onChange={function (e) { setSets(e.target.value); }} style={Object.assign({}, plainInputStyle, { width: 70 })} />
           <input type="text" placeholder="Repeticoes" value={reps} onChange={function (e) { setReps(e.target.value); }} style={Object.assign({}, plainInputStyle, { flex: 1 })} />
@@ -1447,8 +1464,8 @@ function RecentHistoryList(props) {
   );
 }
 
-// Linha de um item da Biblioteca Geral, com modo de edicao inline
-// (nome, categoria, fotos) alem de excluir.
+// Linha de um item da Biblioteca Geral, com edicao inline de Nome,
+// Categoria, URL da foto 1 e URL da foto 2.
 function LibraryItemRow(props) {
   var it = props.item;
   var stateEditing = useState(false); var editing = stateEditing[0]; var setEditing = stateEditing[1];
@@ -1483,7 +1500,7 @@ function LibraryItemRow(props) {
     return (
       <div style={{ background: C.panelAlt, border: "1px solid " + C.blueDim, borderRadius: 12, padding: 12 }}>
         <input type="text" placeholder="Nome do exercicio" value={name} onChange={function (e) { setName(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })} />
-        <input type="text" placeholder="Categoria (ex: Peito, Gluteos)" value={category} onChange={function (e) { setCategory(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })} />
+        <input type="text" placeholder="Categoria (ex: Membros Inferiores)" value={category} onChange={function (e) { setCategory(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })} />
         <input type="text" placeholder="URL da foto 1" value={image} onChange={function (e) { setImage(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })} />
         <input type="text" placeholder="URL da foto 2" value={image2} onChange={function (e) { setImage2(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 10 })} />
         <div style={{ display: "flex", gap: 8 }}>
@@ -1515,8 +1532,8 @@ function LibraryItemRow(props) {
   );
 }
 
-// Biblioteca Geral: cadastro, edicao e exclusao de exercicios reutilizaveis,
-// exibidos agrupados por categoria.
+// Biblioteca Geral: cadastro, edicao (nome, categoria, fotos) e exclusao de
+// exercicios reutilizaveis, exibidos agrupados por categoria.
 function LibraryManager(props) {
   var stateItems = useState([]); var items = stateItems[0]; var setItems = stateItems[1];
   var stateLoading = useState(true); var loading = stateLoading[0]; var setLoading = stateLoading[1];
@@ -1581,7 +1598,7 @@ function LibraryManager(props) {
       <div style={{ background: C.panelAlt, border: "1px solid " + C.border, borderRadius: 12, padding: 12, marginBottom: 20 }}>
         <p style={{ color: C.silverDim, fontSize: 11.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, margin: "0 0 8px" }}>Novo exercicio</p>
         <input type="text" placeholder="Nome do exercicio" value={name} onChange={function (e) { setName(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })} />
-        <input type="text" placeholder="Categoria (ex: Peito, Gluteos)" value={category} onChange={function (e) { setCategory(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })} />
+        <input type="text" placeholder="Categoria (ex: Membros Inferiores)" value={category} onChange={function (e) { setCategory(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })} />
         <input type="text" placeholder="URL da foto 1" value={image} onChange={function (e) { setImage(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })} />
         <input type="text" placeholder="URL da foto 2" value={image2} onChange={function (e) { setImage2(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 10 })} />
         <button onClick={addItem} disabled={saving} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: C.blue, border: "none", borderRadius: 8, color: C.white, fontSize: 13, fontWeight: 700, padding: "10px 0", cursor: "pointer", opacity: saving ? 0.7 : 1 }}>
@@ -1771,13 +1788,16 @@ function ProfessorPanel(props) {
   // Biblioteca agrupada por categoria, para montar as <optgroup> do select.
   var libraryGroups = groupByCategory(library);
 
+  // Correcao do bug: ao selecionar um item da biblioteca, a categoria dele
+  // e SEMPRE copiada para newCategory (mesmo se vazia, "" limpa o campo
+  // corretamente) -- garantindo que addExercise() envie category no payload.
   function handleLibrarySelect(id) {
     setLibrarySelectId(id);
     if (!id) return;
     var item = library.find(function (it) { return it.id === id; });
     if (item) {
       setNewName(item.name);
-      setNewCategory(item.category || "");
+      setNewCategory(item.category ? item.category : "");
       setNewImage(item.image || "");
       setNewImage2(item.image2 || "");
     }
@@ -1785,6 +1805,18 @@ function ProfessorPanel(props) {
 
   async function addExercise() {
     if (!newName.trim()) return;
+
+    // Se o professor selecionou um item da biblioteca e nao alterou o campo
+    // de categoria manualmente, usamos a categoria do item selecionado como
+    // garantia extra (defesa contra qualquer defasagem de estado).
+    var effectiveCategory = newCategory.trim();
+    if (!effectiveCategory && librarySelectId) {
+      var selectedLibItem = library.find(function (it) { return it.id === librarySelectId; });
+      if (selectedLibItem && selectedLibItem.category) {
+        effectiveCategory = selectedLibItem.category.trim();
+      }
+    }
+
     var payload = {
       student_id: selectedStudent.id,
       scheduled_day: selectedDayKey,
@@ -1792,7 +1824,7 @@ function ProfessorPanel(props) {
       sets: Number(newSets) || 1,
       reps: newReps.trim() || "-",
       weight: newWeight.trim() !== "" ? Number(newWeight.replace(",", ".")) : null,
-      category: newCategory.trim() || null,
+      category: effectiveCategory || null,
       image: newImage.trim() || null,
       image2: newImage2.trim() || null,
       notes: newNotes.trim() || null,
@@ -1917,7 +1949,7 @@ function ProfessorPanel(props) {
               </select>
 
               <input type="text" placeholder="Nome do exercicio" value={newName} onChange={function (e) { setNewName(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })} />
-              <input type="text" placeholder="Categoria (ex: Peito, Gluteos)" value={newCategory} onChange={function (e) { setNewCategory(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })} />
+              <input type="text" placeholder="Categoria (ex: Membros Inferiores)" value={newCategory} onChange={function (e) { setNewCategory(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })} />
               <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
                 <input type="number" placeholder="Series" value={newSets} onChange={function (e) { setNewSets(e.target.value); }} style={Object.assign({}, plainInputStyle, { width: 70 })} />
                 <input type="text" placeholder="Repeticoes (ex: 10-12)" value={newReps} onChange={function (e) { setNewReps(e.target.value); }} style={Object.assign({}, plainInputStyle, { flex: 1 })} />
