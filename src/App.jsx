@@ -26,7 +26,6 @@ import {
 import { supabase } from "./supabaseClient.js";
 
 var LOGO_URL = "https://i.postimg.cc/NLQPwFC2/Whats-App-Image-2026-07-14-at-17-04-16.jpg";
-var IMG_GERAL = "https://images.unsplash.com/photo-1583454110551-21f2fa2afe61?w=500&q=80";
 var DEFAULT_CATEGORY = "Geral";
 
 var DAY_TABS = [
@@ -109,8 +108,8 @@ function groupByDay(rows) {
   return grouped;
 }
 
-// Agrupa uma lista de exercicios por category, mantendo a ordem de
-// primeira aparicao dos grupos. Sem categoria cai em "Geral".
+// Agrupa uma lista de itens (exercicios do dia OU itens da biblioteca) por
+// category, mantendo a ordem de primeira aparicao. Sem categoria = "Geral".
 function groupByCategory(rows) {
   var order = [];
   var grouped = {};
@@ -261,6 +260,30 @@ function Spinner(props) {
       <style>{"@keyframes phisic-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }"}</style>
       <Loader2 size={size} color={props.color || C.white} style={{ animation: "phisic-spin 0.8s linear infinite" }} />
     </React.Fragment>
+  );
+}
+
+// Miniatura de imagem com fallback elegante: se nao houver src ou o link
+// quebrar, mostra o icone ImageIcon centralizado em vez de espaco vazio/feio.
+function ImageThumb(props) {
+  var stateError = useState(false); var imgError = stateError[0]; var setImgError = stateError[1];
+  var size = props.size || 44;
+  var iconSize = props.iconSize || Math.round(size * 0.45);
+  var showImage = props.src && !imgError;
+
+  return (
+    <div style={{ width: size, height: size, borderRadius: props.radius || 8, overflow: "hidden", flexShrink: 0, background: C.panelAlt, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      {showImage ? (
+        <img
+          src={props.src}
+          alt={props.alt || ""}
+          onError={function () { setImgError(true); }}
+          style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+        />
+      ) : (
+        <ImageIcon size={iconSize} color={C.silverDim} />
+      )}
+    </div>
   );
 }
 
@@ -876,12 +899,8 @@ function ExerciseDetailModal(props) {
         </div>
 
         <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
-          <div style={{ flex: 1, height: 130, borderRadius: 10, overflow: "hidden", background: C.panelAlt }}>
-            {ex.image ? <img src={ex.image} alt={ex.name + " posicao 1"} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}><ImageIcon size={22} color={C.silverDim} /></div>}
-          </div>
-          <div style={{ flex: 1, height: 130, borderRadius: 10, overflow: "hidden", background: C.panelAlt }}>
-            {ex.image2 ? <img src={ex.image2} alt={ex.name + " posicao 2"} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}><ImageIcon size={22} color={C.silverDim} /></div>}
-          </div>
+          <ImageThumb src={ex.image} alt={ex.name + " posicao 1"} size="100%" radius={10} iconSize={22} />
+          <ImageThumb src={ex.image2} alt={ex.name + " posicao 2"} size="100%" radius={10} iconSize={22} />
         </div>
 
         <p style={{ color: C.silverDim, fontSize: 12.5, margin: "0 0 10px" }}>{ex.sets} series x {ex.reps} reps</p>
@@ -899,20 +918,13 @@ function ExerciseDetailModal(props) {
 
 function ExerciseCard(props) {
   var ex = props.ex;
-  var stateImgError = useState(false); var imgError = stateImgError[0]; var setImgError = stateImgError[1];
   var checked = !!ex.is_completed;
   var currentWeightValue = props.weight !== undefined ? props.weight : (ex.weight != null ? String(ex.weight) : "");
 
   return (
     <div style={{ background: checked ? "rgba(47,134,198,0.08)" : C.panel, border: "1px solid " + (checked ? C.blueDim : C.border), borderRadius: 14, overflow: "hidden" }}>
-      <div style={{ width: "100%", height: 160, background: C.panelAlt, cursor: "pointer" }} onClick={function () { props.onOpenDetail(ex); }}>
-        {ex.image && !imgError ? (
-          <img src={ex.image} alt={ex.name} onError={function () { setImgError(true); }} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
-        ) : (
-          <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <ImageIcon size={32} color={C.silverDim} />
-          </div>
-        )}
+      <div style={{ width: "100%", height: 160, cursor: "pointer" }} onClick={function () { props.onOpenDetail(ex); }}>
+        <ImageThumb src={ex.image} alt={ex.name} size="100%" radius={0} iconSize={32} />
       </div>
 
       <div style={{ padding: 14, display: "flex", gap: 12, alignItems: "center" }}>
@@ -948,21 +960,14 @@ function ExerciseCard(props) {
 
 function LockedExerciseCard(props) {
   var ex = props.ex;
-  var stateImgError = useState(false); var imgError = stateImgError[0]; var setImgError = stateImgError[1];
 
   return (
     <div
       onClick={function () { props.onOpenDetail(ex); }}
       style={{ background: C.panel, border: "1px solid " + C.border, borderRadius: 14, overflow: "hidden", cursor: "pointer", opacity: 0.9 }}
     >
-      <div style={{ width: "100%", height: 140, background: C.panelAlt, position: "relative" }}>
-        {ex.image && !imgError ? (
-          <img src={ex.image} alt={ex.name} onError={function () { setImgError(true); }} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
-        ) : (
-          <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <ImageIcon size={30} color={C.silverDim} />
-          </div>
-        )}
+      <div style={{ width: "100%", height: 140, position: "relative" }}>
+        <ImageThumb src={ex.image} alt={ex.name} size="100%" radius={0} iconSize={30} />
         <div style={{ position: "absolute", top: 8, right: 8, width: 26, height: 26, borderRadius: "50%", background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center" }}>
           <LockIcon size={13} color={C.silverDim} />
         </div>
@@ -980,11 +985,11 @@ function LockedExerciseCard(props) {
   );
 }
 
-// Titulo sutil de categoria (prata, pequeno, caixa alta) exibido antes de
-// cada bloco de exercicios agrupado no painel do aluno.
+// Titulo sutil de categoria (prata, pequeno, caixa alta) usado para separar
+// blocos de exercicios/grupos musculares em qualquer lista do app.
 function CategoryHeading(props) {
   return (
-    <p style={{ color: C.silverDim, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, margin: "18px 0 10px" }}>
+    <p style={{ color: C.silverDim, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, margin: props.first ? "0 0 10px" : "18px 0 10px" }}>
       {props.title}
     </p>
   );
@@ -1262,10 +1267,10 @@ function AlunoDashboard(props) {
             )
           ) : (
             <div>
-              {groupedPlannedList.map(function (group) {
+              {groupedPlannedList.map(function (group, gIdx) {
                 return (
                   <div key={group.category}>
-                    <CategoryHeading title={group.category} />
+                    <CategoryHeading title={group.category} first={gIdx === 0} />
                     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                       {group.items.map(function (ex) {
                         if (isInteractive) {
@@ -1331,8 +1336,8 @@ function AlunoDashboard(props) {
   );
 }
 
-// Linha de exercicio no painel do professor (sem etiqueta A/B/C).
-// Inclui Carga (weight) e Categoria (category).
+// Linha de exercicio no painel do professor (planejamento do dia).
+// Inclui Carga (weight) e Categoria (category). Sem etiqueta A/B/C.
 function ProfessorExerciseRow(props) {
   var ex = props.ex;
   var stateEditing = useState(false); var editing = stateEditing[0]; var setEditing = stateEditing[1];
@@ -1365,7 +1370,7 @@ function ProfessorExerciseRow(props) {
       reps: reps.trim() || "-",
       weight: weight.trim() !== "" ? Number(weight.replace(",", ".")) : null,
       category: category.trim() || null,
-      image: image.trim() || IMG_GERAL,
+      image: image.trim() || null,
       image2: image2.trim() || null,
       notes: notes.trim() || null,
     });
@@ -1397,13 +1402,11 @@ function ProfessorExerciseRow(props) {
 
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 10, background: C.panel, border: "1px solid " + C.border, borderRadius: 12, padding: "10px 12px" }}>
-      <div style={{ width: 44, height: 44, borderRadius: 8, overflow: "hidden", flexShrink: 0, background: C.panelAlt }}>
-        <img src={ex.image || IMG_GERAL} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-      </div>
+      <ImageThumb src={ex.image} alt={ex.name} size={44} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <p style={{ color: C.white, fontSize: 13.5, fontWeight: 700, margin: 0 }}>{ex.name}</p>
         <p style={{ color: C.silverDim, fontSize: 12, margin: 0 }}>
-          {ex.category ? ex.category + " - " : ""}{ex.sets} series x {ex.reps} reps
+          {ex.sets} series x {ex.reps} reps
           {ex.weight != null ? <span style={{ color: C.weightBlue, fontWeight: 700 }}> - {ex.weight}KG</span> : null}
         </p>
         {ex.notes ? <p style={{ color: C.silverDim, fontSize: 11, margin: "2px 0 0", fontStyle: "italic" }}>{ex.notes}</p> : null}
@@ -1444,7 +1447,76 @@ function RecentHistoryList(props) {
   );
 }
 
-// Biblioteca Geral: cadastro de exercicios reutilizaveis, com categoria.
+// Linha de um item da Biblioteca Geral, com modo de edicao inline
+// (nome, categoria, fotos) alem de excluir.
+function LibraryItemRow(props) {
+  var it = props.item;
+  var stateEditing = useState(false); var editing = stateEditing[0]; var setEditing = stateEditing[1];
+  var stateName = useState(it.name); var name = stateName[0]; var setName = stateName[1];
+  var stateCategory = useState(it.category || ""); var category = stateCategory[0]; var setCategory = stateCategory[1];
+  var stateImage = useState(it.image || ""); var image = stateImage[0]; var setImage = stateImage[1];
+  var stateImage2 = useState(it.image2 || ""); var image2 = stateImage2[0]; var setImage2 = stateImage2[1];
+  var stateSaving = useState(false); var saving = stateSaving[0]; var setSaving = stateSaving[1];
+
+  function cancelEdit() {
+    setName(it.name);
+    setCategory(it.category || "");
+    setImage(it.image || "");
+    setImage2(it.image2 || "");
+    setEditing(false);
+  }
+
+  async function saveEdit() {
+    if (!name.trim()) return;
+    setSaving(true);
+    await props.onSave(it.id, {
+      name: name.trim(),
+      category: category.trim() || null,
+      image: image.trim() || null,
+      image2: image2.trim() || null,
+    });
+    setSaving(false);
+    setEditing(false);
+  }
+
+  if (editing) {
+    return (
+      <div style={{ background: C.panelAlt, border: "1px solid " + C.blueDim, borderRadius: 12, padding: 12 }}>
+        <input type="text" placeholder="Nome do exercicio" value={name} onChange={function (e) { setName(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })} />
+        <input type="text" placeholder="Categoria (ex: Peito, Gluteos)" value={category} onChange={function (e) { setCategory(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })} />
+        <input type="text" placeholder="URL da foto 1" value={image} onChange={function (e) { setImage(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })} />
+        <input type="text" placeholder="URL da foto 2" value={image2} onChange={function (e) { setImage2(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 10 })} />
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={saveEdit} disabled={saving} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: C.blue, border: "none", borderRadius: 8, color: C.white, fontSize: 13, fontWeight: 700, padding: "9px 0", cursor: "pointer", opacity: saving ? 0.7 : 1 }}>
+            {saving ? <Spinner size={13} /> : null}
+            {saving ? "Salvando..." : "Salvar"}
+          </button>
+          <button onClick={cancelEdit} style={{ flex: 1, background: "transparent", border: "1px solid " + C.border, borderRadius: 8, color: C.silverDim, fontSize: 13, fontWeight: 700, padding: "9px 0", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}>
+            <X size={14} /> Cancelar
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, background: C.panel, border: "1px solid " + C.border, borderRadius: 12, padding: "10px 12px" }}>
+      <ImageThumb src={it.image} alt={it.name} size={40} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <p style={{ color: C.white, fontSize: 13, fontWeight: 700, margin: 0 }}>{it.name}</p>
+      </div>
+      <button onClick={function () { setEditing(true); }} aria-label="Editar na biblioteca" style={{ width: 30, height: 30, borderRadius: 8, border: "1px solid " + C.border, background: "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>
+        <Pencil size={13} color={C.blue} />
+      </button>
+      <button onClick={function () { props.onDelete(it.id); }} aria-label="Excluir da biblioteca" style={{ width: 30, height: 30, borderRadius: 8, border: "1px solid " + C.border, background: "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>
+        <Trash2 size={14} color={C.danger} />
+      </button>
+    </div>
+  );
+}
+
+// Biblioteca Geral: cadastro, edicao e exclusao de exercicios reutilizaveis,
+// exibidos agrupados por categoria.
 function LibraryManager(props) {
   var stateItems = useState([]); var items = stateItems[0]; var setItems = stateItems[1];
   var stateLoading = useState(true); var loading = stateLoading[0]; var setLoading = stateLoading[1];
@@ -1479,12 +1551,22 @@ function LibraryManager(props) {
     }
   }
 
+  async function saveEditItem(id, updates) {
+    var result = await supabase.from("exercise_library").update(updates).eq("id", id).select();
+    if (!result.error && result.data && result.data.length > 0) {
+      var updatedRow = result.data[0];
+      setItems(function (prev) { return prev.map(function (it) { return it.id === id ? updatedRow : it; }); });
+    }
+  }
+
   async function deleteItem(id) {
     var result = await supabase.from("exercise_library").delete().eq("id", id);
     if (!result.error) {
       setItems(function (prev) { return prev.filter(function (it) { return it.id !== id; }); });
     }
   }
+
+  var groupedItems = groupByCategory(items);
 
   return (
     <PageContainer>
@@ -1494,9 +1576,10 @@ function LibraryManager(props) {
       </button>
 
       <p style={{ color: C.white, fontSize: 17, fontWeight: 800, margin: "0 0 4px" }}>Biblioteca Geral</p>
-      <p style={{ color: C.silverDim, fontSize: 12.5, margin: "0 0 18px" }}>Cadastre exercicios reutilizaveis para agilizar o planejamento.</p>
+      <p style={{ color: C.silverDim, fontSize: 12.5, margin: "0 0 18px" }}>Cadastre e edite exercicios reutilizaveis para agilizar o planejamento.</p>
 
       <div style={{ background: C.panelAlt, border: "1px solid " + C.border, borderRadius: 12, padding: 12, marginBottom: 20 }}>
+        <p style={{ color: C.silverDim, fontSize: 11.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, margin: "0 0 8px" }}>Novo exercicio</p>
         <input type="text" placeholder="Nome do exercicio" value={name} onChange={function (e) { setName(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })} />
         <input type="text" placeholder="Categoria (ex: Peito, Gluteos)" value={category} onChange={function (e) { setCategory(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })} />
         <input type="text" placeholder="URL da foto 1" value={image} onChange={function (e) { setImage(e.target.value); }} style={Object.assign({}, plainInputStyle, { marginBottom: 8 })} />
@@ -1509,24 +1592,21 @@ function LibraryManager(props) {
 
       {loading ? (
         <p style={{ color: C.silverDim, fontSize: 13, textAlign: "center" }}>Carregando biblioteca...</p>
+      ) : items.length === 0 ? (
+        <p style={{ color: C.silverDim, fontSize: 13, textAlign: "center" }}>Nenhum exercicio na biblioteca ainda.</p>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {items.length === 0 ? (
-            <p style={{ color: C.silverDim, fontSize: 13, textAlign: "center" }}>Nenhum exercicio na biblioteca ainda.</p>
-          ) : null}
-          {items.map(function (it) {
+        <div>
+          {groupedItems.map(function (group, gIdx) {
             return (
-              <div key={it.id} style={{ display: "flex", alignItems: "center", gap: 10, background: C.panel, border: "1px solid " + C.border, borderRadius: 12, padding: "10px 12px" }}>
-                <div style={{ width: 40, height: 40, borderRadius: 8, overflow: "hidden", flexShrink: 0, background: C.panelAlt }}>
-                  <img src={it.image || IMG_GERAL} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              <div key={group.category}>
+                <CategoryHeading title={group.category} first={gIdx === 0} />
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {group.items.map(function (it) {
+                    return (
+                      <LibraryItemRow key={it.id} item={it} onSave={saveEditItem} onDelete={deleteItem} />
+                    );
+                  })}
                 </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ color: C.white, fontSize: 13, fontWeight: 700, margin: 0 }}>{it.name}</p>
-                  {it.category ? <p style={{ color: C.silverDim, fontSize: 11.5, margin: 0 }}>{it.category}</p> : null}
-                </div>
-                <button onClick={function () { deleteItem(it.id); }} aria-label="Excluir da biblioteca" style={{ width: 30, height: 30, borderRadius: 8, border: "1px solid " + C.border, background: "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>
-                  <Trash2 size={14} color={C.danger} />
-                </button>
               </div>
             );
           })}
@@ -1537,8 +1617,8 @@ function LibraryManager(props) {
 }
 
 // Painel do professor: dia PASSADO -> so historico/mensagem, sem formulario.
-// Dia de HOJE ou FUTURO -> planejamento normal (sem selecao A/B/C), com
-// selecao da biblioteca agrupada por categoria via <optgroup>.
+// Dia de HOJE ou FUTURO -> planejamento normal, agrupado por categoria, com
+// selecao da biblioteca agrupada via <optgroup>.
 function ProfessorPanel(props) {
   var stateMode = useState("students"); var mode = stateMode[0]; var setMode = stateMode[1];
   var stateStudents = useState([]); var students = stateStudents[0]; var setStudents = stateStudents[1];
@@ -1666,6 +1746,7 @@ function ProfessorPanel(props) {
   var selectedDayKey = getDayKeyForDate(selectedDate);
   var byDay = groupByDay(allExercises);
   var list = byDay[selectedDayKey];
+  var groupedList = groupByCategory(list);
   var historyForSelectedDate = findHistoryForDate(historyRecords, selectedDate);
   var isCompletedDay = !!historyForSelectedDate;
   var canPlan = !isPastSelected;
@@ -1712,7 +1793,7 @@ function ProfessorPanel(props) {
       reps: newReps.trim() || "-",
       weight: newWeight.trim() !== "" ? Number(newWeight.replace(",", ".")) : null,
       category: newCategory.trim() || null,
-      image: newImage.trim() || IMG_GERAL,
+      image: newImage.trim() || null,
       image2: newImage2.trim() || null,
       notes: newNotes.trim() || null,
     };
@@ -1795,14 +1876,22 @@ function ProfessorPanel(props) {
         <div>
           {loadingWorkout ? (
             <p style={{ color: C.silverDim, fontSize: 13, textAlign: "center", padding: "12px 0" }}>Carregando exercicios...</p>
+          ) : list.length === 0 ? (
+            <p style={{ color: C.silverDim, fontSize: 13, textAlign: "center", padding: "12px 0", marginBottom: 16 }}>Nenhum exercicio agendado para {DAY_FULL_LABEL[selectedDayKey]}. Adicione abaixo.</p>
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
-              {list.length === 0 ? (
-                <p style={{ color: C.silverDim, fontSize: 13, textAlign: "center", padding: "12px 0" }}>Nenhum exercicio agendado para {DAY_FULL_LABEL[selectedDayKey]}. Adicione abaixo.</p>
-              ) : null}
-              {list.map(function (ex) {
+            <div style={{ marginBottom: 16 }}>
+              {groupedList.map(function (group, gIdx) {
                 return (
-                  <ProfessorExerciseRow key={ex.id} ex={ex} onSave={saveEditExercise} onDelete={deleteExercise} />
+                  <div key={group.category}>
+                    <CategoryHeading title={group.category} first={gIdx === 0} />
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      {group.items.map(function (ex) {
+                        return (
+                          <ProfessorExerciseRow key={ex.id} ex={ex} onSave={saveEditExercise} onDelete={deleteExercise} />
+                        );
+                      })}
+                    </div>
+                  </div>
                 );
               })}
             </div>
