@@ -701,17 +701,26 @@ function CompletedDayView(props) {
               }
             }
             return (
-              <div key={idx} style={{ background: C.panel, border: "1px solid " + (showEvolution ? C.success : C.border), borderRadius: 8, padding: "8px 10px" }}>
-                <div style={{ display: "flex", justifyContent: "space-between" }}>
-                  <span style={{ color: C.white, fontSize: 12.5 }}>{item.name}</span>
-                  <span style={{ color: C.silverDim, fontSize: 12 }}>{item.weight ? item.weight + "kg" : "-"}</span>
-                </div>
-                {showEvolution ? (
-                  <p style={{ color: C.success, fontSize: 11.5, fontWeight: 700, margin: "4px 0 0" }}>
-                    🔥 Evolucao! Voce aumentou a carga neste aparelho
-                  </p>
-                ) : null}
-              </div>
+          <div key={idx} style={{ background: C.panel, border: "1px solid " + (showEvolution ? C.success : C.border), borderRadius: 8, padding: "10px", marginBottom: "8px" }}>
+  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+    <div style={{ display: "flex", flexDirection: "column" }}>
+      <span style={{ color: C.white, fontSize: 13, fontWeight: '500' }}>{item.name}</span>
+      <span style={{ color: C.silverDim, fontSize: 10, textTransform: 'uppercase' }}>Exercício</span>
+    </div>
+    <div style={{ textAlign: "right", display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
+      <div style={{ display: "flex", alignItems: "baseline" }}>
+        <span style={{ color: "#60a5fa", fontSize: 16, fontWeight: 'bold' }}>{item.weight || '-'}</span>
+        <span style={{ color: "#60a5fa", opacity: 0.7, fontSize: 10, fontWeight: 'bold', marginLeft: 2 }}>KG</span>
+      </div>
+      <span style={{ color: C.silverDim, fontSize: 9, textTransform: 'uppercase' }}>Carga</span>
+    </div>
+  </div>
+  {showEvolution && (
+    <p style={{ color: C.success, fontSize: 11, fontWeight: 700, margin: "6px 0 0" }}>
+      🔥 Evolução! Você aumentou a carga neste aparelho
+    </p>
+  )}
+</div>
             );
           })}
         </div>
